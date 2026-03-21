@@ -656,29 +656,29 @@ export default function App() {
   // ═══════════════════════════════════════════════════════════════
   // MOBILE STYLES
   // ═══════════════════════════════════════════════════════════════
-  const C={bg:"#080f1e",card:"rgba(255,255,255,0.05)",border:"rgba(255,255,255,0.09)",text:"#e2e8f0",muted:"#64748b",accent:"#38bdf8",success:"#22c55e",warn:"#f59e0b",danger:"#ef4444",purple:"#a78bfa"};
+  const C={bg:"#f0f4f8",card:"#ffffff",border:"#dce3ea",text:"#1a2b3c",muted:"#64748b",accent:"#1565c0",success:"#1a6b3a",warn:"#92400e",danger:"#b91c1c",purple:"#4a148c"};
   const roleCol=ROLE_META[userRole]?.color||C.accent;
   const s={
-    wrap:{minHeight:"100vh",minHeight:"100dvh",width:"100%",background:`linear-gradient(150deg,${C.bg} 0%,#0a1628 55%,#091d30 100%)`,fontFamily:"'Segoe UI',system-ui,sans-serif",color:C.text,paddingBottom:90,fontSize:16},
-    card:{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20,marginBottom:14},
-    input:{width:"100%",background:"rgba(255,255,255,0.07)",border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",color:C.text,fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
-    select:{width:"100%",background:"#081422",border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",color:C.text,fontSize:16,outline:"none",boxSizing:"border-box"},
-    btn:(v,full)=>({background:v==="primary"?"linear-gradient(135deg,#0369a1,#0ea5e9)":v==="success"?"linear-gradient(135deg,#15803d,#22c55e)":v==="danger"?"linear-gradient(135deg,#b91c1c,#ef4444)":v==="warn"?"linear-gradient(135deg,#b45309,#f59e0b)":v==="purple"?"linear-gradient(135deg,#6d28d9,#a78bfa)":v==="gold"?"linear-gradient(135deg,#92400e,#f59e0b)":"rgba(255,255,255,0.08)",border:"none",borderRadius:10,padding:full?"14px 0":"10px 18px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14,width:full?"100%":"auto",transition:"all .15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}),
+    wrap:{minHeight:"100vh",minHeight:"100dvh",width:"100%",background:"#f0f4f8",fontFamily:"'Segoe UI',system-ui,sans-serif",color:C.text,paddingBottom:100,fontSize:16},
+    card:{background:"#ffffff",border:"1px solid #dce3ea",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"},
+    input:{width:"100%",background:"#ffffff",border:"1.5px solid #dce3ea",borderRadius:10,padding:"14px 16px",color:"#1a2b3c",fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
+    select:{width:"100%",background:"#ffffff",border:"1.5px solid #dce3ea",borderRadius:10,padding:"14px 16px",color:"#1a2b3c",fontSize:16,outline:"none",boxSizing:"border-box"},
+    btn:(v,full)=>({background:v==="primary"?"linear-gradient(135deg,#0369a1,#0ea5e9)":v==="success"?"linear-gradient(135deg,#15803d,#22c55e)":v==="danger"?"linear-gradient(135deg,#b91c1c,#ef4444)":v==="warn"?"linear-gradient(135deg,#b45309,#f59e0b)":v==="purple"?"linear-gradient(135deg,#6d28d9,#a78bfa)":v==="gold"?"linear-gradient(135deg,#92400e,#f59e0b)":"rgba(255,255,255,0.08)",border:"none",borderRadius:10,padding:full?"16px 0":"12px 20px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14,width:full?"100%":"auto",transition:"all .15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}),
     label:{display:"block",fontSize:12,color:C.muted,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:.5},
     badge:(st)=>({display:"inline-block",padding:"3px 10px",borderRadius:999,fontSize:11,fontWeight:700,background:st==="Approved"?"#22c55e1a":st==="Rejected"?"#ef44441a":st==="Reg Recommended"?"#3b82f61a":st==="LO Recommended"?"#a78bfa1a":st==="Not Recommended"?"#ef444411":"#f59e0b1a",color:st==="Approved"?C.success:st==="Rejected"?C.danger:st==="Reg Recommended"?"#3b82f6":st==="LO Recommended"?C.purple:st==="Not Recommended"?C.danger:C.warn,border:`1px solid ${st==="Approved"?"#22c55e33":st==="Rejected"?"#ef444433":st==="Reg Recommended"?"#3b82f633":st==="LO Recommended"?"#a78bfa33":st==="Not Recommended"?"#ef444433":"#f59e0b33"}`}),
-    alertBox:(t)=>({padding:"12px 14px",borderRadius:10,marginBottom:10,background:t==="error"?"#ef444415":t==="success"?"#22c55e15":"#f59e0b15",border:`1px solid ${t==="error"?"#ef444433":t==="success"?"#22c55e33":"#f59e0b33"}`,color:t==="error"?C.danger:t==="success"?C.success:C.warn,fontSize:13}),
-    attChip:(st)=>({display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"6px 12px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",background:st==="present"?"#22c55e22":st==="absent"?"#ef444422":st==="late"?"#f59e0b22":st==="on_leave"?"#0ea5e922":"rgba(255,255,255,0.06)",color:st==="present"?C.success:st==="absent"?C.danger:st==="late"?C.warn:st==="on_leave"?C.accent:C.muted,border:`1px solid ${st==="present"?"#22c55e33":st==="absent"?"#ef444433":st==="late"?"#f59e0b33":st==="on_leave"?"#0ea5e933":C.border}`,minWidth:60}),
-    bottomNav:{position:"fixed",bottom:0,left:0,right:0,background:"rgba(8,15,30,0.97)",backdropFilter:"blur(16px)",borderTop:`1px solid ${C.border}`,display:"flex",zIndex:200},
-    navItem:(active,col="#38bdf8")=>({flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 4px 8px",cursor:"pointer",background:"transparent",border:"none",color:active?col:C.muted,fontSize:11,fontWeight:active?700:400,gap:3}),
-    main:{maxWidth:1100,margin:"0 auto",padding:"14px 16px",width:"100%"},
-    sectionChip:(sec)=>({fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:sec==="Academic"?"#38bdf822":"#a78bfa22",color:sec==="Academic"?"#38bdf8":"#a78bfa"}),
+    alertBox:(t)=>({padding:"12px 14px",borderRadius:10,marginBottom:10,background:t==="error"?"#fde8e8":t==="success"?"#e8f5e9":"#fef9ec",border:`1px solid ${t==="error"?"#f5c2c2":t==="success"?"#a8d5b0":"#f0d060"}`,color:t==="error"?"#b91c1c":t==="success"?"#1a6b3a":"#92400e",fontSize:14,fontWeight:500}),
+    attChip:(st)=>({display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"8px 14px",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer",background:st==="present"?"#e8f5e9":st==="absent"?"#fde8e8":st==="late"?"#fef9ec":st==="on_leave"?"#e3f2fd":"#f0f4f8",color:st==="present"?"#1a6b3a":st==="absent"?"#b91c1c":st==="late"?"#92400e":st==="on_leave"?"#1565c0":"#64748b",border:`1px solid ${st==="present"?"#a8d5b0":st==="absent"?"#f5c2c2":st==="late"?"#f0d060":st==="on_leave"?"#90caf9":"#dce3ea"}`,minWidth:70}),
+    bottomNav:{position:"fixed",bottom:0,left:0,right:0,background:"#ffffff",borderTop:"2px solid #dce3ea",display:"flex",zIndex:200,boxShadow:"0 -2px 10px rgba(0,0,0,0.08)"},
+    navItem:(active,col="#1565c0")=>({flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"12px 4px 10px",cursor:"pointer",background:active?"#e8f0fe":"transparent",border:"none",color:active?col:"#64748b",fontSize:13,fontWeight:active?700:500,gap:4,borderTop:active?"3px solid "+col:"3px solid transparent"}),
+    main:{maxWidth:1100,margin:"0 auto",padding:"16px 14px",width:"100%"},
+    sectionChip:(sec)=>({fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:4,background:sec==="Academic"?"#e3f2fd":"#f3e8ff",color:sec==="Academic"?"#1565c0":"#4a148c"}),
   };
 
   // Modal
   const Modal = modal?(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:999,display:"flex",flexDirection:"column",padding:14}} onClick={()=>setModal(null)}>
-      <div style={{background:"#0c1e35",border:`1px solid ${C.border}`,borderRadius:14,flex:1,overflow:"auto",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,background:"#0c1e35"}}>
+      <div style={{background:"#ffffff",border:"1px solid #dce3ea",borderRadius:14,flex:1,overflow:"auto",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"1px solid #dce3ea",position:"sticky",top:0,background:"#1a3a5c"}}>
           <div style={{fontWeight:700,fontSize:14,color:"#f1f5f9",flex:1}}>{modal.title}</div>
           <button style={{...s.btn("primary"),padding:"7px 12px",fontSize:12,marginLeft:8}} onClick={()=>{navigator.clipboard.writeText(modal.content).then(()=>alert("Copied!"));}}>📋</button>
           <button style={{...s.btn(""),padding:"7px 12px",fontSize:12,marginLeft:6}} onClick={()=>setModal(null)}>✕</button>
@@ -690,7 +690,7 @@ export default function App() {
 
   // PIN Modal
   const PinModal = pinModal?(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:998,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"#f0f4f8"}}>
       <div style={{...s.card,width:"100%",maxWidth:340,padding:24}}>
         <div style={{fontWeight:700,marginBottom:16,fontSize:16}}>🔑 Change PIN</div>
         <label style={s.label}>New PIN</label>
@@ -766,11 +766,11 @@ export default function App() {
     // ── HOME ────────────────────────────────────────────────────
     if(tab==="home") return(
       <>
-        <div style={{...s.card,background:"linear-gradient(135deg,rgba(14,165,233,0.15),rgba(56,189,248,0.05))",borderColor:"rgba(56,189,248,0.2)",marginBottom:12}}>
+        <div style={{...s.card,background:"linear-gradient(135deg,#1a3a5c,#2e6da4)",borderColor:"#1a3a5c",marginBottom:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
-              <div style={{fontSize:18,fontWeight:800}}>👋 {currentUser.title} {currentUser.lastName}</div>
-              <div style={{fontSize:12,color:C.muted,marginTop:2}}>{currentUser.designation}</div>
+              <div style={{fontSize:19,fontWeight:800,color:"#ffffff"}}>👋 {currentUser.title} {currentUser.lastName}</div>
+              <div style={{fontSize:13,color:"rgba(255,255,255,0.8)",marginTop:2}}>{currentUser.designation}</div>
               <div style={{fontSize:11,color:C.muted}}>{currentUser.section} · Emp# {currentUser.empNo}</div>
               <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
                 <span style={{...s.sectionChip(currentUser.section)}}>{currentUser.section}</span>
@@ -878,7 +878,7 @@ export default function App() {
         [...myLeaves].reverse().map(r=>(
           <div key={r.id} style={{...s.card,marginBottom:10}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-              <div><div style={{fontSize:13,fontWeight:700}}>{r.type}</div><div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div><div style={{fontSize:10,color:"#334155",marginTop:2}}>{r.reason.substring(0,50)}</div></div>
+              <div><div style={{fontSize:15,fontWeight:700}}>{r.type}</div><div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div><div style={{fontSize:10,color:"#334155",marginTop:2}}>{r.reason.substring(0,50)}</div></div>
               <span style={s.badge(r.status)}>{r.status}</span>
             </div>
             {r.medCertRequired&&!r.medCertReceived&&r.status==="Approved"&&<div style={{fontSize:11,color:C.danger,background:"#ef444415",padding:"4px 8px",borderRadius:6,marginBottom:6}}>⚠️ Medical certificate not yet submitted</div>}
@@ -948,11 +948,11 @@ export default function App() {
         <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>🤖 AI Leave Assistant</div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:10}}>
           {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#1e3a52"}}>Responds in English or Sinhala.</span></div>}
-          {chatMsgs.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}><div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"linear-gradient(135deg,#0369a1,#0ea5e9)":"rgba(255,255,255,0.07)",fontSize:13,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.text}</div></div>)}
+          {chatMsgs.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}><div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"#1565c0":"#f0f4f8",fontSize:13,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.text}</div></div>)}
           {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center"}}>Thinking…</div>}
           <div ref={chatEnd}/>
         </div>
-        <div style={{display:"flex",gap:8,paddingTop:8,borderTop:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",gap:8,paddingTop:8,borderTop:"1px solid #dce3ea"}}>
           <input style={{...s.input,flex:1,fontSize:14}} value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendChat()} placeholder="Ask about leave…" />
           <button style={{...s.btn("primary"),padding:"12px 16px"}} onClick={sendChat}>➤</button>
         </div>
@@ -989,7 +989,7 @@ export default function App() {
               </div>
               <div style={{fontSize:10,color:"#a78bfa",marginBottom:6}}>After your recommendation → Registrar recommends → Director approves</div>
               <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
-              <div style={{fontSize:11,color:"#94a3b8",marginBottom:10}}>{r.reason}</div>
+              <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 <button style={{...s.btn("success"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,true,"leave_officer")}>✓ Recommend</button>
                 <button style={{...s.btn("danger"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,false,"leave_officer")}>✗ Not Rec.</button>
@@ -1087,7 +1087,7 @@ export default function App() {
                   </div>
                   <div style={{fontSize:10,background:"rgba(167,139,250,0.1)",borderRadius:6,padding:"4px 8px",marginBottom:8,color:"#a78bfa"}}>Leave Officer has recommended · Your recommendation goes to Director for final approval</div>
                   <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
-                  <div style={{fontSize:11,color:"#94a3b8",marginBottom:10}}>{r.reason}</div>
+                  <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     <button style={{...s.btn("success"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,true,"registrar")}>✓ Recommend to Director</button>
                     <button style={{...s.btn("danger"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,false,"registrar")}>✗ Not Recommend</button>
@@ -1113,7 +1113,7 @@ export default function App() {
                     <span style={s.badge(r.status)}>{r.status}</span>
                   </div>
                   <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
-                  <div style={{fontSize:11,color:"#94a3b8",marginBottom:10}}>{r.reason}</div>
+                  <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     <button style={{...s.btn("success"),padding:"10px 16px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✓ Approve</button>
                     <button style={{...s.btn("danger"),padding:"10px 16px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>✗ Reject</button>
@@ -1140,7 +1140,7 @@ export default function App() {
                       <span style={s.badge(r.status)}>{r.status}</span>
                     </div>
                     <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
-                    <div style={{fontSize:11,color:"#94a3b8",marginBottom:10}}>{r.reason}</div>
+                    <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                       <button style={{...s.btn("success"),padding:"10px 16px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✓ Approve</button>
                       <button style={{...s.btn("danger"),padding:"10px 16px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>✗ Reject</button>
@@ -1162,7 +1162,7 @@ export default function App() {
                     </div>
                     {r.recommendation&&<div style={{fontSize:10,color:"#94a3b8",marginBottom:5,fontStyle:"italic"}}>📝 {r.recommendation}</div>}
                     <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
-                    <div style={{fontSize:11,color:"#94a3b8",marginBottom:10}}>{r.reason}</div>
+                    <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                       <button style={{...s.btn("success"),padding:"10px 16px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✓ Approve</button>
                       <button style={{...s.btn("danger"),padding:"10px 16px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>✗ Reject</button>
@@ -1224,7 +1224,7 @@ export default function App() {
           <div key={e.empNo} style={{...s.card,marginBottom:6}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
               <div>
-                <div style={{fontSize:12,fontWeight:600,color:T.navy}}>{e.fullName}</div>
+                <div style={{fontSize:14,fontWeight:600,color:"#1a3a5c"}}>{e.fullName}</div>
                 <div style={{fontSize:10,color:T.textMuted}}>{e.designation} · {e.section}</div>
               </div>
               <button style={{...s.btn("navy"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET — ${e.fullName}`,content:genDTETLetter(e,leaveRecords)})}>📄 DTET</button>
@@ -1422,7 +1422,7 @@ export default function App() {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <div style={{fontSize:12,fontWeight:600}}>{emp.fullName}</div>
-                  <div style={{fontSize:10,color:C.muted}}>{emp.designation}</div>
+                  <div style={{fontSize:12,color:"#64748b"}}>{emp.designation}</div>
                   {classified.coverUntil&&<div style={{fontSize:10,color:C.warn,fontWeight:700}}>Must cover until {classified.coverUntil}</div>}
                   {classified.minorLate&&<div style={{fontSize:10,color:"#84cc16"}}>Minor late — counts toward monthly pair</div>}
                 </div>
@@ -1473,7 +1473,7 @@ export default function App() {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <div>
                   <div style={{fontSize:12,fontWeight:700}}>{emp.fullName}</div>
-                  <div style={{fontSize:10,color:C.muted}}>{emp.designation} · <span style={{color:emp.staffGrade==="junior"?"#f59e0b":"#38bdf8"}}>{emp.staffGrade}</span></div>
+                  <div style={{fontSize:12,color:"#64748b"}}>{emp.designation} · <span style={{color:emp.staffGrade==="junior"?"#f59e0b":"#38bdf8"}}>{emp.staffGrade}</span></div>
                 </div>
                 <span style={{fontSize:14,fontWeight:800,color:pct>=90?C.success:pct>=75?C.warn:pct>0?C.danger:C.muted}}>{pres>0?pct+"%":"—"}</span>
               </div>
@@ -1604,7 +1604,7 @@ export default function App() {
       <div style={s.bottomNav}>
         {navItems.map(n=>(
           <button key={n.k} style={s.navItem(tab===n.k,roleCol)} onClick={()=>setTab(n.k)}>
-            <span style={{fontSize:22}}>{n.i}</span>
+            <span style={{fontSize:28,lineHeight:1}}>{n.i}</span>
             <span>{n.l}</span>
           </button>
         ))}
