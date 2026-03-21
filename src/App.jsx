@@ -659,18 +659,18 @@ export default function App() {
   const C={bg:"#080f1e",card:"rgba(255,255,255,0.05)",border:"rgba(255,255,255,0.09)",text:"#e2e8f0",muted:"#64748b",accent:"#38bdf8",success:"#22c55e",warn:"#f59e0b",danger:"#ef4444",purple:"#a78bfa"};
   const roleCol=ROLE_META[userRole]?.color||C.accent;
   const s={
-    wrap:{minHeight:"100vh",background:`linear-gradient(150deg,${C.bg} 0%,#0a1628 55%,#091d30 100%)`,fontFamily:"'Segoe UI',system-ui,sans-serif",color:C.text,paddingBottom:80},
-    card:{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:16,marginBottom:12},
-    input:{width:"100%",background:"rgba(255,255,255,0.07)",border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:15,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
-    select:{width:"100%",background:"#081422",border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:15,outline:"none",boxSizing:"border-box"},
+    wrap:{minHeight:"100vh",minHeight:"100dvh",width:"100%",background:`linear-gradient(150deg,${C.bg} 0%,#0a1628 55%,#091d30 100%)`,fontFamily:"'Segoe UI',system-ui,sans-serif",color:C.text,paddingBottom:90,fontSize:16},
+    card:{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20,marginBottom:14},
+    input:{width:"100%",background:"rgba(255,255,255,0.07)",border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",color:C.text,fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
+    select:{width:"100%",background:"#081422",border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px",color:C.text,fontSize:16,outline:"none",boxSizing:"border-box"},
     btn:(v,full)=>({background:v==="primary"?"linear-gradient(135deg,#0369a1,#0ea5e9)":v==="success"?"linear-gradient(135deg,#15803d,#22c55e)":v==="danger"?"linear-gradient(135deg,#b91c1c,#ef4444)":v==="warn"?"linear-gradient(135deg,#b45309,#f59e0b)":v==="purple"?"linear-gradient(135deg,#6d28d9,#a78bfa)":v==="gold"?"linear-gradient(135deg,#92400e,#f59e0b)":"rgba(255,255,255,0.08)",border:"none",borderRadius:10,padding:full?"14px 0":"10px 18px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14,width:full?"100%":"auto",transition:"all .15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}),
-    label:{display:"block",fontSize:11,color:C.muted,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:.5},
+    label:{display:"block",fontSize:12,color:C.muted,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:.5},
     badge:(st)=>({display:"inline-block",padding:"3px 10px",borderRadius:999,fontSize:11,fontWeight:700,background:st==="Approved"?"#22c55e1a":st==="Rejected"?"#ef44441a":st==="Reg Recommended"?"#3b82f61a":st==="LO Recommended"?"#a78bfa1a":st==="Not Recommended"?"#ef444411":"#f59e0b1a",color:st==="Approved"?C.success:st==="Rejected"?C.danger:st==="Reg Recommended"?"#3b82f6":st==="LO Recommended"?C.purple:st==="Not Recommended"?C.danger:C.warn,border:`1px solid ${st==="Approved"?"#22c55e33":st==="Rejected"?"#ef444433":st==="Reg Recommended"?"#3b82f633":st==="LO Recommended"?"#a78bfa33":st==="Not Recommended"?"#ef444433":"#f59e0b33"}`}),
     alertBox:(t)=>({padding:"12px 14px",borderRadius:10,marginBottom:10,background:t==="error"?"#ef444415":t==="success"?"#22c55e15":"#f59e0b15",border:`1px solid ${t==="error"?"#ef444433":t==="success"?"#22c55e33":"#f59e0b33"}`,color:t==="error"?C.danger:t==="success"?C.success:C.warn,fontSize:13}),
     attChip:(st)=>({display:"inline-flex",alignItems:"center",justifyContent:"center",padding:"6px 12px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",background:st==="present"?"#22c55e22":st==="absent"?"#ef444422":st==="late"?"#f59e0b22":st==="on_leave"?"#0ea5e922":"rgba(255,255,255,0.06)",color:st==="present"?C.success:st==="absent"?C.danger:st==="late"?C.warn:st==="on_leave"?C.accent:C.muted,border:`1px solid ${st==="present"?"#22c55e33":st==="absent"?"#ef444433":st==="late"?"#f59e0b33":st==="on_leave"?"#0ea5e933":C.border}`,minWidth:60}),
     bottomNav:{position:"fixed",bottom:0,left:0,right:0,background:"rgba(8,15,30,0.97)",backdropFilter:"blur(16px)",borderTop:`1px solid ${C.border}`,display:"flex",zIndex:200},
-    navItem:(active,col="#38bdf8")=>({flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 4px",cursor:"pointer",background:"transparent",border:"none",color:active?col:C.muted,fontSize:10,fontWeight:active?700:400,gap:2}),
-    main:{maxWidth:600,margin:"0 auto",padding:"12px 14px"},
+    navItem:(active,col="#38bdf8")=>({flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 4px 8px",cursor:"pointer",background:"transparent",border:"none",color:active?col:C.muted,fontSize:11,fontWeight:active?700:400,gap:3}),
+    main:{maxWidth:1100,margin:"0 auto",padding:"14px 16px",width:"100%"},
     sectionChip:(sec)=>({fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:sec==="Academic"?"#38bdf822":"#a78bfa22",color:sec==="Academic"?"#38bdf8":"#a78bfa"}),
   };
 
@@ -690,7 +690,7 @@ export default function App() {
 
   // PIN Modal
   const PinModal = pinModal?(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:998,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:998,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div style={{...s.card,width:"100%",maxWidth:340,padding:24}}>
         <div style={{fontWeight:700,marginBottom:16,fontSize:16}}>🔑 Change PIN</div>
         <label style={s.label}>New PIN</label>
@@ -714,7 +714,7 @@ export default function App() {
     const empRole=empMatch?(FIXED_ROLES[empMatch.empNo]||"staff"):null;
     return(
       <div style={{...s.wrap,display:"flex",alignItems:"center",justifyContent:"center",paddingBottom:0}}>
-        <div style={{width:"100%",maxWidth:400,padding:24}}>
+        <div style={{width:"100%",maxWidth:480,padding:28}}>
           <div style={{textAlign:"center",marginBottom:32}}>
             <div style={{width:80,height:80,borderRadius:22,background:"linear-gradient(135deg,#0369a1,#38bdf8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,margin:"0 auto 14px"}}>🏛️</div>
             <div style={{fontSize:22,fontWeight:800,color:"#f1f5f9"}}>COT Ratnapura</div>
@@ -798,7 +798,7 @@ export default function App() {
         {/* Leave balance cards */}
         {userRole==="staff"&&<>
           <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Leave Balance {currYear}</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12,marginBottom:16}}>
             {myBalances.filter(b=>b.total>0||b.type==="Half Pay Leave").slice(0,4).map(b=>(
               <div key={b.type} style={{...s.card,borderColor:b.color+"33",background:b.color+"0a",padding:"14px 14px"}}>
                 <div style={{fontSize:28,fontWeight:800,color:b.color,lineHeight:1}}>{b.balance}</div>
