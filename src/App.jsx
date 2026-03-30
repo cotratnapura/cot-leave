@@ -1,6 +1,41 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 // ═══════════════════════════════════════════════════════════════
+// SUPABASE CLIENT — Replace ANON_KEY with your key from Supabase
+// Settings → API → anon public key
+// ═══════════════════════════════════════════════════════════════
+const SUPABASE_URL = "https://wfstvhoyvukvllrjviqt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indmc3R2aG95dnVrdmxscmp2aXF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxNzY4NTcsImV4cCI6MjA4OTc1Mjg1N30.KxyEltQZLseuZjz0cxzX2ShpvBhoQuoLuu5HxQAbKfo";
+
+async function sb(table, method="GET", body=null, params="") {
+  const url = `${SUPABASE_URL}/rest/v1/${table}${params}`;
+  const headers = {
+    "apikey": SUPABASE_ANON_KEY,
+    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    "Content-Type": "application/json",
+    "Prefer": method==="UPSERT"?"resolution=merge-duplicates,return=representation":"return=representation",
+  };
+  const res = await fetch(url,{
+    method: method==="UPSERT"?"POST":method,
+    headers,
+    body: body?JSON.stringify(body):undefined,
+  });
+  if(!res.ok){const err=await res.text();console.error("Supabase:",err);return null;}
+  if(res.status===204) return true;
+  return res.json();
+}
+const dbGet    = (t,p="")   => sb(t,"GET",null,p);
+const dbInsert = (t,d)      => sb(t,"POST",d);
+const dbUpsert = (t,d)      => sb(t,"UPSERT",d);
+const dbPatch  = (t,p,d)    => sb(t,"PATCH",d,p);
+const dbDelete = (t,p)      => sb(t,"DELETE",null,p);
+
+
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE CLIENT
+// Replace SUPABASE_URL and SUPABASE_ANON_KEY with your values
+// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 // STAFF DATA — 52 Permanent Staff
 // ═══════════════════════════════════════════════════════════════
 const STAFF = [
@@ -465,12 +500,17 @@ export default function App() {
   const [loginEmp, setLoginEmp] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [loginErr, setLoginErr] = useState("");
+  const [dbReady, setDbReady] = useState(false);
+  const [dbError, setDbError] = useState(false);
   const [screen, setScreen] = useState("login");
   const [tab, setTab] = useState("home");
   const [leaveRecords, setLeaveRecords] = useState({});
-  const [attendance, setAttendance] = useState({});     // [date][empNo] = {status, scanTime, minorLate, coverUntil}
-  const [scanData, setScanData] = useState({});          // [date][empNo] = rawScanTime
-  const [shortLeaveRecs, setShortLeaveRecs] = useState({});  // [empNo] = [{date, type, month}]
+  const [attendance, setAttendance] = useState({});
+  const [scanData, setScanData] = useState({});
+  const [shortLeaveRecs, setShortLeaveRecs] = useState({});
+  const [compLeave, setCompLeave] = useState([]);  // compensatory leave records
+  // Acting officer state for apply form
+  const [actingEmpNo, setActingEmpNo] = useState("");
   const [form, setForm] = useState({type:"Casual Leave",from:"",to:"",reason:""});
   const [formMsg, setFormMsg] = useState(null);
   const [modal, setModal] = useState(null);
@@ -487,6 +527,68 @@ export default function App() {
   const chatEnd = useRef(null);
   const [chatMsgs, setChatMsgs] = useState([]); const [chatInput, setChatInput] = useState(""); const [chatLoading, setChatLoading] = useState(false); const [showChat, setShowChat] = useState(false);
   useEffect(()=>{ chatEnd.current?.scrollIntoView({behavior:"smooth"}); },[chatMsgs]);
+
+  // ── Load all data from Supabase on startup ────────────────────
+  useEffect(()=>{
+    async function loadAll(){
+      try{
+        // Load pins
+        const pinsData = await dbGet("pins","?select=emp_no,pin");
+        if(pinsData){
+          const p={};
+          pinsData.forEach(r=>{ p[r.emp_no]=r.pin; });
+          setPins(prev=>({...prev,...p}));
+        }
+        // Load leave records
+        const leaves = await dbGet("leave_records","?select=*&order=created_at.asc");
+        if(leaves){
+          const lr={};
+          leaves.forEach(r=>{
+            if(!lr[r.emp_no]) lr[r.emp_no]=[];
+            lr[r.emp_no].push({
+              id:r.id, type:r.type, from:r.from_date, to:r.to_date,
+              days:r.days, reason:r.reason, status:r.status,
+              appliedOn:r.applied_on, approvedOn:r.approved_on||"",
+              approvedBy:r.approved_by||"", recommendation:r.recommendation||"",
+              medCertRequired:r.med_cert_required, medCertReceived:r.med_cert_received,
+              actingEmpNo:r.acting_emp_no||"", actingName:r.acting_name||"",
+              actingConfirmed:r.acting_confirmed||false,
+            });
+          });
+          setLeaveRecords(lr);
+        }
+        // Load attendance
+        const att = await dbGet("attendance","?select=*");
+        if(att){
+          const a={};
+          att.forEach(r=>{
+            if(!a[r.date]) a[r.date]={};
+            a[r.date][r.emp_no]={status:r.status,scanTime:r.scan_time,minorLate:r.minor_late,coverUntil:r.cover_until};
+          });
+          setAttendance(a);
+        }
+        // Load short leaves
+        const shorts = await dbGet("short_leaves","?select=*");
+        if(shorts){
+          const sl={};
+          shorts.forEach(r=>{
+            if(!sl[r.emp_no]) sl[r.emp_no]=[];
+            sl[r.emp_no].push({date:r.date,type:r.type,month:r.month});
+          });
+          setShortLeaveRecs(sl);
+        }
+        // Load comp leave
+        const comp = await dbGet("comp_leave","?select=*&order=created_at.asc");
+        if(comp) setCompLeave(comp);
+        setDbReady(true);
+      }catch(e){
+        console.error("DB load error:",e);
+        setDbError(true);
+        setDbReady(true); // still allow app to work offline
+      }
+    }
+    loadAll();
+  },[]);
 
   // ── Derived ──────────────────────────────────────────────────
   const myLeaves = currentUser?(leaveRecords[currentUser.empNo]||[]):[];
@@ -561,21 +663,210 @@ export default function App() {
   function doApprove(empNo,id){
     setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:"Approved",approvedBy:userRole,approvedOn:today()}:r)}));
   }
-  function doReject(empNo,id){setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:"Rejected"}:r)}));}
-  function doRecommend(empNo,id,val,role){
-    // Only Non Academic leaves go through LO → Registrar → Director chain
-    // Academic leaves go directly to Director — no recommendation needed
+  async function doReject(empNo,id){
+    setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:"Rejected"}:r)}));
+    try{ await dbPatch("leave_records",`?id=eq.${id}`,{status:"Rejected"}); }
+    catch(e){ console.error("Reject error:",e); }
+  }
+  async function doRecommend(empNo,id,val,role){
     const emp=STAFF.find(e=>e.empNo===empNo);
     let newStatus;
     if(!val) newStatus="Not Recommended";
     else if(role==="leave_officer") newStatus="LO Recommended";
     else if(role==="registrar") newStatus="Reg Recommended";
     else newStatus="LO Recommended";
-    setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:newStatus,recommendation:(val?"Recommended by "+(role==="leave_officer"?"Leave Officer":"Registrar"):"Not Recommended by "+(role==="leave_officer"?"Leave Officer":"Registrar"))}:r)}));
+    const recNote = val?"Recommended by "+(role==="leave_officer"?"Leave Officer":"Registrar"):"Not Recommended by "+(role==="leave_officer"?"Leave Officer":"Registrar");
+    setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:newStatus,recommendation:recNote}:r)}));
+    try{ await dbPatch("leave_records",`?id=eq.${id}`,{status:newStatus,recommendation:recNote}); }
+    catch(e){ console.error("Recommend error:",e); }
   }
-  function markMedCert(empNo,id){setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,medCertReceived:true}:r)}));}
+  async function markMedCert(empNo,id){
+    setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,medCertReceived:true}:r)}));
+    try{ await dbPatch("leave_records",`?id=eq.${id}`,{med_cert_received:true}); }
+    catch(e){ console.error("MedCert error:",e); }
+  }
 
   // ── Attendance + Finger Scan ──────────────────────────────────
+  // ── Compensatory Leave ───────────────────────────────────────────
+  async function grantCompLeave(empNo, workDate, halfDay){
+    const emp=STAFF.find(e=>e.empNo===empNo);
+    const daysEarned=halfDay?0.5:1;
+    const expires=new Date(workDate); expires.setFullYear(expires.getFullYear()+1);
+    const expiresOn=expires.toISOString().slice(0,10);
+    const rec={emp_no:empNo,work_date:workDate,half_day:halfDay,days_earned:daysEarned,approved_by:currentUser.empNo,approved_on:today(),expires_on:expiresOn,used:false};
+    try{
+      const saved=await dbInsert("comp_leave",rec);
+      if(saved&&saved[0]) setCompLeave(p=>[...p,saved[0]]);
+      alert(`Compensatory leave granted to ${emp?.fullName}.
+${daysEarned} day(s) for working on ${workDate}.
+Expires: ${expiresOn}`);
+    }catch(e){console.error("Comp leave error:",e);alert("Error saving. Please try again.");}
+  }
+
+  function getCompBalance(empNo){
+    const t=today();
+    return compLeave.filter(r=>r.emp_no===empNo&&!r.used&&r.expires_on>=t).reduce((a,b)=>a+parseFloat(b.days_earned),0);
+  }
+
+  // ── Acting Officer ────────────────────────────────────────────────
+  function getActingOptions(emp){
+    const MSO_DEV=["Management Service Officer","Development Officer"];
+    if(MSO_DEV.includes(emp.designation)) return STAFF.filter(e=>e.empNo!==emp.empNo&&MSO_DEV.includes(e.designation));
+    return STAFF.filter(e=>e.empNo!==emp.empNo&&e.designation===emp.designation);
+  }
+
+  // ── No Pay Leave Head Office Letter ──────────────────────────────
+  function genNoPayHeadOfficeLetter(emp,rec){
+    const refNo=`COTR/2/ADM/4/${currYear}-${String(Math.floor(Math.random()*900)+100)}`;
+    return `               Ministry of Education, Higher Education and Vocational Training
+               Department of Technical Education and Training
+               College of Technology – Ratnapura
+
+Our No: ${refNo}                              Date: ${todayLong()}
+
+අධ්‍යක්ෂ ජනරාල්,
+කාර්මික අධ්‍යාපන හා පුහුණු කිරීම් දෙපාර්තමේන්තුව,
+ලේකම් අංශය,
+ෆේස් 02, 557, බිල්කාර් මාවත, කොළඹ 10.
+
+           Subject: Application for No Pay Leave — ${emp.fullName}
+
+I hereby forward the No Pay Leave application of the above-mentioned officer for your approval:
+
+  Name             : ${emp.fullName}
+  Designation      : ${emp.designation}
+  Employee No      : ${emp.empNo}
+  Section          : ${emp.section}
+  Leave Type       : No Pay Leave (s.22 Establishments Code)
+  From             : ${rec.from}
+  To               : ${rec.to}
+  No. of Days      : ${rec.days}
+  Reason           : ${rec.reason}
+
+This officer has been recommended for No Pay Leave as per the Establishments Code Chapter XII s.22. 
+The duties of the officer will be covered by an acting officer during the leave period.
+
+Please grant approval at your earliest convenience.
+
+Yours faithfully,
+
+.......................................
+L. A. Kithsiri
+Director
+College of Technology Ratnapura
+Tel: 0452232390  |  Ref: ${refNo}`.trim();
+  }
+
+  // ── Unauthorized Absence Investigation Notice ─────────────────────
+  function genInvestigationNotice(emp, dates){
+    const refNo=`COTR/2/ADM/4/${currYear}-${String(Math.floor(Math.random()*900)+100)}`;
+    return `               College of Technology – Ratnapura (DTET)
+               Palm Garden, Ratnapura
+
+Our No: ${refNo}                              Date: ${todayLong()}
+
+${emp.title}. ${emp.fullName}
+${emp.designation}
+College of Technology Ratnapura.
+
+Dear ${emp.title}. ${emp.lastName},
+
+       SUBJECT: UNAUTHORIZED ABSENCE FROM DUTY — EXPLANATION CALLED
+
+This letter is written to inform you that you were absent from duty on the following date(s) without obtaining prior approval or submitting a leave application:
+
+${dates.map((d,i)=>`  ${i+1}. ${d}`).join('
+')}
+
+Your absence constitutes an unauthorized absence under the Sri Lanka Establishments Code and DTET Circular DTET/04/PF/01/15 dated 2026.03.26.
+
+You are hereby required to:
+  1. Submit a written explanation for your absence within 03 working days of receipt of this letter.
+  2. Submit the relevant leave application with supporting documents immediately.
+  3. Failure to respond within the stipulated time may result in disciplinary action.
+
+Please treat this matter with utmost urgency.
+
+Yours faithfully,
+
+.......................................
+L. A. Kithsiri
+Director
+College of Technology Ratnapura
+Tel: 0452232390`.trim();
+  }
+
+
+  // ── Compensatory Leave ───────────────────────────────────────────
+  async function grantCompLeave(empNo, workDate, halfDay){
+    const emp=STAFF.find(e=>e.empNo===empNo);
+    const daysEarned=halfDay?0.5:1;
+    const expires=new Date(workDate); expires.setFullYear(expires.getFullYear()+1);
+    const expiresOn=expires.toISOString().slice(0,10);
+    const rec={emp_no:empNo,work_date:workDate,half_day:halfDay,days_earned:daysEarned,
+      approved_by:currentUser.empNo,approved_on:today(),expires_on:expiresOn,used:false};
+    try{
+      const saved=await dbInsert("comp_leave",rec);
+      if(saved&&saved[0]) setCompLeave(p=>[...p,saved[0]]);
+      alert(`Compensatory leave granted to ${emp?.fullName}.\n${daysEarned} day(s) for working on ${workDate}.\nExpires: ${expiresOn}`);
+    }catch(e){console.error("Comp leave error:",e);}
+  }
+
+  function getCompBalance(empNo){
+    const t=today();
+    return compLeave.filter(r=>r.emp_no===empNo&&!r.used&&r.expires_on>=t).reduce((a,b)=>a+parseFloat(b.days_earned),0);
+  }
+
+  function getActingOptions(emp){
+    const MSO_DEV=["Management Service Officer","Development Officer"];
+    if(MSO_DEV.includes(emp.designation)) return STAFF.filter(e=>e.empNo!==emp.empNo&&MSO_DEV.includes(e.designation));
+    return STAFF.filter(e=>e.empNo!==emp.empNo&&e.designation===emp.designation);
+  }
+
+  function genNoPayLetter(emp,rec){
+    const refNo=`COTR/2/ADM/4/${currYear}-${String(Math.floor(Math.random()*900)+100)}`;
+    return `               Department of Technical Education and Training
+               College of Technology – Ratnapura
+
+Our No: ${refNo}                              Date: ${todayLong()}
+
+Director General, DTET, No.557, Elvitigala Mawatha, Colombo 10.
+
+       Subject: No Pay Leave Application — ${emp.fullName}
+
+  Name           : ${emp.fullName}
+  Designation    : ${emp.designation}
+  Employee No    : ${emp.empNo}
+  Leave Type     : No Pay Leave (Establishments Code s.22)
+  From           : ${rec.from}  To: ${rec.to}  Days: ${rec.days}
+  Reason         : ${rec.reason}
+
+Recommended for approval as per Establishments Code Chapter XII s.22.
+
+.......................................
+L. A. Kithsiri, Director, COT Ratnapura  Tel: 0452232390`.trim();
+  }
+
+  function genInvestigationNotice(emp, dates){
+    const refNo=`COTR/2/ADM/4/${currYear}-${String(Math.floor(Math.random()*900)+100)}`;
+    return `               College of Technology – Ratnapura (DTET)
+
+Our No: ${refNo}                              Date: ${todayLong()}
+
+${emp.title}. ${emp.fullName}, ${emp.designation}
+
+       SUBJECT: UNAUTHORIZED ABSENCE — EXPLANATION CALLED
+       (DTET Circular DTET/04/PF/01/15 — 2026.03.26)
+
+You were absent from duty on the following date(s) without approval:
+${dates.map((d,i)=>`  ${i+1}. ${d}`).join('\n')}
+
+You are required to submit a written explanation within 03 working days.
+Failure to respond may result in disciplinary action.
+
+L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
+  }
+
   function syncFingerScan(date) {
     const newScan={};
     STAFF.forEach(emp=>{
@@ -611,9 +902,16 @@ export default function App() {
     return d;
   }
 
-  function setAttStatus(empNo,date,statusOrObj){
+  async function setAttStatus(empNo,date,statusOrObj){
     const obj=typeof statusOrObj==="string"?{status:statusOrObj}:statusOrObj;
     setAttendance(p=>({...p,[date]:{...(p[date]||{}),[empNo]:obj}}));
+    try{
+      await dbUpsert("attendance",{
+        emp_no:empNo, date, status:obj.status||null,
+        scan_time:obj.scanTime||null, minor_late:obj.minorLate||false,
+        cover_until:obj.coverUntil||null,
+      });
+    }catch(e){ console.error("Attendance save error:",e); }
   }
 
   // Short leave management
@@ -648,7 +946,7 @@ export default function App() {
     const msg=chatInput.trim();setChatInput("");setChatMsgs(p=>[...p,{role:"user",text:msg}]);setChatLoading(true);
     const balStr=myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:`You are the Leave Management AI for COT Ratnapura, DTET Sri Lanka. Expert on Establishments Code Ch.XII and PACs to 08/2025. Key rules: Officer casual=21/yr (calendar basis); Junior casual=0 first year, 21/yr after 1yr continuous service; Officer vacation=24/yr (appointment basis first 2yr); Junior sick=prorated first 9mo then 24/yr; Medical leave excludes weekends/holidays (PAC 18/2022); Casual max 6 days at once; Director approves all staff; Registrar approves non-academic only. ${currentUser?`User: ${currentUser.fullName} (${userRole}), ${currentUser.designation}, grade:${currentUser.staffGrade}, joined:${currentUser.joined}`:""}. ${myBalances.length?`Balances: ${balStr}`:""} Respond in English or Sinhala as asked.`,messages:[...chatMsgs.map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:msg}]})}); const data=await res.json(); setChatMsgs(p=>[...p,{role:"assistant",text:data.content?.[0]?.text||"Error."}]);
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:"You are the official Leave Management AI for College of Technology Ratnapura (COT Ratnapura), DTET Sri Lanka. You know all leave rules including: Establishments Code Ch.XII, PACs to 08/2025, and DTET Circular DTET/04/PF/01/15 (2026.03.26). SINHALA TERMS: Casual=Aniyam Nivadu/\u0d85\u0db1\u0dd2\u0dba\u0db8\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4; Vacation=Viveka Nivadu; Sick=Asanipa Nivadu; Half Pay=Ada Watupu Nivadu (අඩ වැටුප් නිවාඩු); No Pay=Watupu Rahita Nivadu; Compensatory=Hilavu Nivadu (\u0dc4\u0dd2\u0dbd\u0dc0\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4); Short Leave=Keti Nivadu; Acting Officer=Wada Awarana Niladari (වැඩ ආවරණ නිලධාරී). KEY RULES: Casual 21/yr calendar basis (officer); Casual 0 first year then 21/yr after 1yr (junior); Vacation 24/yr; Sick prorated first 9mo then 24/yr (junior); Medical leave excludes weekends/holidays; Casual max 6 days at once; Short leave 2/month AM 8:30-10:00 PM officer 14:45/junior 15:00 to 16:15; Late before 09:00=minor(2 per month forgiven); Late after 09:00=must cover until 16:45; Compensatory leave earned by working on weekend/holiday, expires 1 year, half day possible; Acting officer required on Gen 125a; Academic staff: Director approves directly; Non Academic: Leave Officer recommends then Registrar recommends then Director approves. DTET/04/PF/01/15: Director must inform DG day before own leave; No Pay needs Head Office letter; Unauthorized absence needs written explanation in 3 working days; Vacation/sick/no-pay needs leave statement and medical cert. "+ (currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.",messages:[...chatMsgs.map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:msg}]})}); const data=await res.json(); setChatMsgs(p=>[...p,{role:"assistant",text:data.content?.[0]?.text||"Error."}]);
     }catch{setChatMsgs(p=>[...p,{role:"assistant",text:"Connection error."}]);}
     setChatLoading(false);
   }
@@ -707,6 +1005,18 @@ export default function App() {
 
   // ═══════════════════════════════════════════════════════════════
   // LOGIN
+  // LOADING SCREEN
+  if(!dbReady) return(
+    <div style={{minHeight:"100vh",background:"#f0f4f8",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"Segoe UI,system-ui,sans-serif"}}>
+      <div style={{width:72,height:72,borderRadius:18,background:"#1a3a5c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36}}>🏛</div>
+      <div style={{fontSize:20,fontWeight:700,color:"#1a3a5c"}}>COT Ratnapura</div>
+      <div style={{fontSize:14,color:"#64748b"}}>Loading system data...</div>
+      <div style={{width:40,height:40,border:"4px solid #dce3ea",borderTop:"4px solid #1a3a5c",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+      <style>{"@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}"}</style>
+      {dbError&&<div style={{fontSize:12,color:"#b91c1c",background:"#fde8e8",padding:"8px 16px",borderRadius:8,maxWidth:300,textAlign:"center"}}>Database connection issue - working in offline mode</div>}
+    </div>
+  );
+
   // ═══════════════════════════════════════════════════════════════
   if(screen==="login"){
     const empMatch=STAFF.find(s=>s.empNo===loginEmp.trim()||s.fullName.toLowerCase().includes(loginEmp.trim().toLowerCase()));
@@ -751,8 +1061,8 @@ export default function App() {
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
     leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:"Pending"},{k:"register",i:"📓",l:"Register"},{k:"reports",i:"📑",l:"Reports"},{k:"alerts",i:"🚨",l:"Alerts"}],
-    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"letters",i:"📄",l:"Letters"},{k:"summary",i:"📊",l:"Summary"},{k:"reports",i:"📑",l:"Reports"}],
-    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"summary",i:"📊",l:"Summary"},{k:"settings",i:"⚙️",l:"Settings"}],
+    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"comp",i:"⭐",l:"Comp."},{k:"letters",i:"📄",l:"Letters"},{k:"reports",i:"📑",l:"Reports"}],
+    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"comp",i:"⭐",l:"Comp."},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"}],
     ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"🖐",l:"Scan"},{k:"monthly",i:"📊",l:"Monthly"},{k:"flags",i:"🚩",l:"Flags"}],
   };
   const navItems = navByRole[userRole]||navByRole.staff;
@@ -844,7 +1154,7 @@ export default function App() {
         {svcBanner}
         <label style={s.label}>Leave Type</label>
         <select style={{...s.select,marginBottom:12}} value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
-          {["Casual Leave","Vacation/Sick Leave","Half Pay Leave","No Pay Leave","Maternity Leave","Special Leave","Study Leave (Local)"].map(t=><option key={t}>{t}</option>)}
+          {["Casual Leave","Vacation/Sick Leave","Compensatory Leave","Half Pay Leave","No Pay Leave","Maternity Leave","Special Leave","Study Leave (Local)"].map(t=><option key={t}>{t}</option>)}
         </select>
         {myBalances.filter(b=>b.type===form.type).map(b=>(
           b.total>0&&<div key={b.type} style={{background:b.color+"0f",border:`1px solid ${b.color}33`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
