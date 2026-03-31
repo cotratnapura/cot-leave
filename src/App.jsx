@@ -511,6 +511,9 @@ export default function App() {
   const [compLeave, setCompLeave] = useState([]);  // compensatory leave records
   // Acting officer state for apply form
   const [actingEmpNo, setActingEmpNo] = useState("");
+  const [lang, setLang] = useState("en");  // "en" or "si" (Sinhala)
+  // Language helper
+  const t = (en, si) => lang==="si" ? si : en;
   const [form, setForm] = useState({type:"Casual Leave",from:"",to:"",reason:""});
   const [formMsg, setFormMsg] = useState(null);
   const [modal, setModal] = useState(null);
@@ -618,16 +621,28 @@ export default function App() {
   function doLogin() {
     setLoginErr("");
     const emp=STAFF.find(s=>s.empNo===loginEmp.trim()||s.lastName.toLowerCase()===loginEmp.trim().toLowerCase()||s.fullName.toLowerCase().includes(loginEmp.trim().toLowerCase()));
-    if(!emp){setLoginErr("Employee not found.");return;}
-    const role=FIXED_ROLES[emp.empNo]||"staff";
-    if(["director","registrar","leave_officer","ict_officer"].includes(role)){
-      if(!loginPin){setLoginErr("Enter your PIN.");return;}
-      if(loginPin!==(pins[emp.empNo]||"")){setLoginErr("Incorrect PIN.");return;}
+    if(!emp){setLoginErr(lang==="si"?"සේවකයා හමු නොවීය.":"Employee not found.");return;}
+    if(!loginPin){setLoginErr(lang==="si"?"PIN ඇතුළු කරන්න.":"Please enter your PIN.");return;}
+    // Special roles have set PINs. Regular staff default PIN = last 4 digits of empNo
+    const storedPin = pins[emp.empNo]||"";
+    const defaultPin = emp.empNo.slice(-4);
+    const correctPin = storedPin || defaultPin;
+    if(loginPin!==correctPin){
+      setLoginErr(lang==="si"?`වැරදි PIN. (Default: ${defaultPin})`:`Incorrect PIN. Default PIN is last 4 digits of Employee No: ${defaultPin}`);
+      return;
     }
-    setCurrentUser(emp); setUserRole(role); setTab("home"); setScreen("app");
+    setCurrentUser(emp); setUserRole(FIXED_ROLES[emp.empNo]||"staff"); setTab("home"); setScreen("app");
   }
   function doLogout(){setCurrentUser(null);setUserRole(null);setScreen("login");setLoginEmp("");setLoginPin("");setLoginErr("");}
-  function changePin(){if(newPin.length<4){alert("Minimum 4 digits.");return;}if(newPin!==confirmPin){alert("PINs don't match.");return;}setPins(p=>({...p,[currentUser.empNo]:newPin}));setNewPin("");setConfirmPin("");setPinModal(false);alert("PIN changed!");}
+  async function changePin(){
+    if(newPin.length<4){alert(lang==="si"?"අඩුම ඉලක්කම් 4ක් ඇතුළු කරන්න.":"Minimum 4 digits.");return;}
+    if(newPin!==confirmPin){alert(lang==="si"?"PIN ගැලපෙන්නේ නැත.":"PINs do not match.");return;}
+    setPins(p=>({...p,[currentUser.empNo]:newPin}));
+    setNewPin("");setConfirmPin("");setPinModal(false);
+    try{ await dbUpsert("pins",{emp_no:currentUser.empNo,pin:newPin,updated_at:new Date().toISOString()}); }
+    catch(e){ console.error("PIN save:",e); }
+    alert(lang==="si"?"PIN සාර්ථකව වෙනස් කරන ලදී!":"PIN changed successfully!");
+  }
 
   // ── Leave actions ─────────────────────────────────────────────
   function submitLeave(e){
@@ -959,6 +974,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   const s={
     wrap:{minHeight:"100vh",minHeight:"100dvh",width:"100%",background:"#f0f4f8",fontFamily:"'Segoe UI',system-ui,sans-serif",color:C.text,paddingBottom:100,fontSize:16},
     card:{background:"#ffffff",border:"1px solid #dce3ea",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.07)"},
+    cardNavy:{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:16,marginBottom:14},
     input:{width:"100%",background:"#ffffff",border:"1.5px solid #dce3ea",borderRadius:10,padding:"14px 16px",color:"#1a2b3c",fontSize:16,outline:"none",boxSizing:"border-box",fontFamily:"inherit"},
     select:{width:"100%",background:"#ffffff",border:"1.5px solid #dce3ea",borderRadius:10,padding:"14px 16px",color:"#1a2b3c",fontSize:16,outline:"none",boxSizing:"border-box"},
     btn:(v,full)=>({background:v==="primary"?"linear-gradient(135deg,#0369a1,#0ea5e9)":v==="success"?"linear-gradient(135deg,#15803d,#22c55e)":v==="danger"?"linear-gradient(135deg,#b91c1c,#ef4444)":v==="warn"?"linear-gradient(135deg,#b45309,#f59e0b)":v==="purple"?"linear-gradient(135deg,#6d28d9,#a78bfa)":v==="gold"?"linear-gradient(135deg,#92400e,#f59e0b)":"rgba(255,255,255,0.08)",border:"none",borderRadius:10,padding:full?"16px 0":"12px 20px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14,width:full?"100%":"auto",transition:"all .15s",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}),
@@ -1060,10 +1076,10 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:"Pending"},{k:"register",i:"📓",l:"Register"},{k:"reports",i:"📑",l:"Reports"},{k:"alerts",i:"🚨",l:"Alerts"}],
-    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"comp",i:"⭐",l:"Comp."},{k:"letters",i:"📄",l:"Letters"},{k:"reports",i:"📑",l:"Reports"}],
-    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"comp",i:"⭐",l:"Comp."},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"}],
-    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"🖐",l:"Scan"},{k:"monthly",i:"📊",l:"Monthly"},{k:"flags",i:"🚩",l:"Flags"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:"Pending"},{k:"register",i:"📓",l:"Register"},{k:"alerts",i:"🚨",l:"Alerts"},{k:"chat",i:"🤖",l:"AI"}],
+    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"letters",i:"📄",l:"Letters"},{k:"chat",i:"🤖",l:"AI"}],
+    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
+    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"🖐",l:"Scan"},{k:"monthly",i:"📊",l:"Monthly"},{k:"chat",i:"🤖",l:"AI"}],
   };
   const navItems = navByRole[userRole]||navByRole.staff;
 
@@ -1494,9 +1510,9 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📑 Reports & Letters</div>
 
         {/* ── Gen 190 Monthly Report ── */}
-        <div style={{...s.cardNavy,padding:"12px 14px",marginBottom:10}}>
-          <div style={{fontSize:12,color:T.gold,fontWeight:700,marginBottom:8}}>📓 Monthly Leave Register — Gen 190</div>
-          <label style={{...s.label,color:T.blueLt}}>Select Month</label>
+        <div style={{...{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.15)"},padding:"12px 14px",marginBottom:10}}>
+          <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📓 Monthly Leave Register — Gen 190</div>
+          <label style={{...s.label}}>Select Month</label>
           <input type="month" style={{...s.input,marginBottom:10}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
           <button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>setModal({title:`Gen 190 — ${reportMonth}`,content:genMonthlyGen190(leaveRecords,reportMonth)})}>
             📓 Generate Gen 190 Report
@@ -1504,9 +1520,9 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         </div>
 
         {/* ── Leave Summary per staff ── */}
-        <div style={{...s.cardNavy,padding:"12px 14px",marginBottom:10}}>
-          <div style={{fontSize:12,color:T.gold,fontWeight:700,marginBottom:8}}>📊 Leave Summary — Any Staff Member</div>
-          <label style={{...s.label,color:T.blueLt}}>Staff Member</label>
+        <div style={{...{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.15)"},padding:"12px 14px",marginBottom:10}}>
+          <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📊 Leave Summary — Any Staff Member</div>
+          <label style={{...s.label}}>Staff Member</label>
           <select style={{...s.select,marginBottom:8}} value={summaryEmp} onChange={e=>setSummaryEmp(e.target.value)}>
             <option value="">— Select staff member —</option>
             {STAFF.filter(e=>userRole==="registrar"?e.section==="Non Academic":true).map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
@@ -1515,8 +1531,8 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             {["year","month","custom"].map(p=><button key={p} style={{...s.btn(summaryPeriod===p?"gold":"outline"),padding:"8px 0",fontSize:11}} onClick={()=>setSummaryPeriod(p)}>{p==="year"?"This Year":p==="month"?"This Month":"Custom"}</button>)}
           </div>
           {summaryPeriod==="custom"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-            <div><label style={{...s.label,color:T.blueLt}}>From</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
-            <div><label style={{...s.label,color:T.blueLt}}>To</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
+            <div><label style={{...s.label}}>From</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
+            <div><label style={{...s.label}}>To</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
           </div>}
           {summaryEmp&&<button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>{
             const emp=STAFF.find(e=>e.empNo===summaryEmp);
@@ -1535,7 +1551,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
               <div>
                 <div style={{fontSize:14,fontWeight:600,color:"#1a3a5c"}}>{e.fullName}</div>
-                <div style={{fontSize:10,color:T.textMuted}}>{e.designation} · {e.section}</div>
+                <div style={{fontSize:10,color:"#64748b"}}>{e.designation} · {e.section}</div>
               </div>
               <button style={{...s.btn("navy"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET — ${e.fullName}`,content:genDTETLetter(e,leaveRecords)})}>📄 DTET</button>
             </div>
