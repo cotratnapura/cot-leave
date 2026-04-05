@@ -99,14 +99,6 @@ alter table short_leaves enable row level security;
 alter table comp_leave enable row level security;
 alter table scan_data enable row level security;
 
--- Drop policies if re-running this script (safe to run multiple times)
-drop policy if exists "allow_all_pins" on pins;
-drop policy if exists "allow_all_leave" on leave_records;
-drop policy if exists "allow_all_attendance" on attendance;
-drop policy if exists "allow_all_short" on short_leaves;
-drop policy if exists "allow_all_comp" on comp_leave;
-drop policy if exists "allow_all_scan" on scan_data;
-
 -- Allow anon key to read/write all tables
 create policy "allow_all_pins" on pins for all using (true) with check (true);
 create policy "allow_all_leave" on leave_records for all using (true) with check (true);
