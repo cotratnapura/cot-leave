@@ -185,7 +185,7 @@ function getLeaveBalance(emp, leaveRecords, year=currYear) {
 
 // Abnormal leave threshold: >15 casual in a year, or >20 vacation in a year
 function isAbnormal(emp, leaveRecords, year=currYear) {
-  const cas=getUsedLeave(emp.empNo,leaveRecords,"Casual Leave",year);
+  const cas=getUsedLeave(emp.empNo,leaveRecords,t("Casual Leave","අනියම් නිවාඩු"),year);
   const vac=getUsedLeave(emp.empNo,leaveRecords,"Vacation/Sick Leave",year);
   const ent=getEntitlement(emp,year);
   return { cas, vac, abnormal: cas>(ent.casual*0.75)||vac>(ent.vacation*0.75), severe: cas>=ent.casual||vac>=ent.vacation };
@@ -194,7 +194,7 @@ function isAbnormal(emp, leaveRecords, year=currYear) {
 // Medical cert overdue: medical leave approved >3 working days ago, no cert noted
 function medCertOverdue(emp, leaveRecords) {
   const overdues=[];
-  (leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved"&&(r.type==="Vacation/Sick Leave"||r.type==="Half Pay Leave")&&!r.medCertReceived).forEach(r=>{
+  (leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved"&&(r.type==="Vacation/Sick Leave"||r.type===t("Half Pay Leave","අඩ වැටුප්"))&&!r.medCertReceived).forEach(r=>{
     const daysSince=Math.floor((new Date()-new Date(r.approvedOn||r.appliedOn))/864e5);
     if(daysSince>3) overdues.push(r);
   });
@@ -292,7 +292,7 @@ function generateScanData(empNo, date) {
 // ═══════════════════════════════════════════════════════════════
 function genForm125a(rec, emp) {
   const ent=getEntitlement(emp,new Date().getFullYear());
-  const isCas=rec.type==="Casual Leave"||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
+  const isCas=rec.type===t("Casual Leave","අනියම් නිවාඩු")||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
   const isVac=rec.type==="Vacation/Sick Leave"||rec.type==="Maternity Leave";
   return `╔══════════════════════════════════════════════════════════════════════════╗
 ║  නිවාඩු ඉල්ලුම් පතුය / APPLICATION FOR LEAVE — General 125 අ/a         ║
@@ -322,9 +322,9 @@ function genForm125a(rec, emp) {
 }
 
 function genForm190Entry(rec, emp) {
-  const isCas=rec.type==="Casual Leave"||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
+  const isCas=rec.type===t("Casual Leave","අනියම් නිවාඩු")||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
   const isVac=rec.type==="Vacation/Sick Leave"||rec.type==="Maternity Leave";
-  const isHP=rec.type==="Half Pay Leave"; const isNP=rec.type==="No Pay Leave";
+  const isHP=rec.type===t("Half Pay Leave","අඩ වැටුප්"); const isNP=rec.type===t("No Pay Leave","වැටුප් රහිත");
   return `║${rec.from.slice(5).padEnd(7)}║${rec.to.slice(5).padEnd(7)}║${isCas?String(rec.days).padEnd(7):"       "}║${isVac?String(rec.days).padEnd(7):"       "}║${"       "}║${"           "}║${isHP?(" - "+rec.days).padEnd(10):"          "}║${isNP?(" - "+rec.days).padEnd(10):"          "}║ ${rec.reason.substring(0,30).padEnd(30)} ║`;
 }
 
@@ -341,7 +341,7 @@ function genMonthlyGen190(leaveRecords, month) {
   STAFF.forEach(emp=>{
     const recs=(leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved"&&r.from.startsWith(month));
     recs.forEach(r=>{
-      const isCas=r.type==="Casual Leave"||r.type==="Special Leave"; const isVac=r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave"; const isHP=r.type==="Half Pay Leave"; const isNP=r.type==="No Pay Leave";
+      const isCas=r.type===t("Casual Leave","අනියම් නිවාඩු")||r.type==="Special Leave"; const isVac=r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave"; const isHP=r.type===t("Half Pay Leave","අඩ වැටුප්"); const isNP=r.type===t("No Pay Leave","වැටුප් රහිත");
       if(isCas) total.cas+=r.days; if(isVac) total.vac+=r.days; if(isHP) total.hp+=r.days; if(isNP) total.np+=r.days;
       lines+=`║${emp.empNo.padEnd(7)}║${emp.fullName.substring(0,31).padEnd(31)}║${r.from.slice(5).padEnd(7)}║${r.to.slice(5).padEnd(7)}║${isCas?String(r.days).padEnd(7):"       "}║${isVac?String(r.days).padEnd(7):"       "}║${"           "}║${isHP?(" - "+r.days).padEnd(10):"          "}║${isNP?(" - "+r.days).padEnd(10):"          "}║ ${r.reason.substring(0,30).padEnd(30)} ║\n`;
     });
@@ -365,7 +365,7 @@ function genLeaveSummary(emp, leaveRecords, from, to, label) {
   out+=`╠══════════════════════╦═════════════╦═════════════╦════════════════════╣\n`;
   out+=`║ Leave Type           ║ Entitlement ║ Used        ║ Balance            ║\n`;
   out+=`╠══════════════════════╬═════════════╬═════════════╬════════════════════╣\n`;
-  const types=["Casual Leave","Vacation/Sick Leave","Half Pay Leave","No Pay Leave","Maternity Leave","Special Leave","Study Leave (Local)"];
+  const types=[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Half Pay Leave","අඩ වැටුප්"),t("No Pay Leave","වැටුප් රහිත"),"Maternity Leave","Special Leave","Study Leave (Local)"];
   const entMap={"Casual Leave":ent.casual,"Vacation/Sick Leave":ent.vacation,"Half Pay Leave":"—","No Pay Leave":"—","Maternity Leave":ent.maternity,"Special Leave":ent.special,"Study Leave (Local)":ent.study};
   types.forEach(t=>{
     const used=totals[t]||0; const e=entMap[t]; const bal=typeof e==="number"?Math.max(0,e-used):"—";
@@ -459,7 +459,7 @@ Registrar, College of Technology Ratnapura`;
 function genDTETLetter(emp, leaveRecords) {
   const recs=(leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved");
   const years={};
-  recs.forEach(r=>{ const y=r.from.slice(0,4); if(!years[y]) years[y]={cas:0,vac:0,hp:0,np:0}; if(r.type==="Casual Leave"||r.type==="Special Leave") years[y].cas+=r.days; else if(r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave") years[y].vac+=r.days; else if(r.type==="Half Pay Leave") years[y].hp+=r.days; else if(r.type==="No Pay Leave") years[y].np+=r.days; });
+  recs.forEach(r=>{ const y=r.from.slice(0,4); if(!years[y]) years[y]={cas:0,vac:0,hp:0,np:0}; if(r.type===t("Casual Leave","අනියම් නිවාඩු")||r.type==="Special Leave") years[y].cas+=r.days; else if(r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave") years[y].vac+=r.days; else if(r.type===t("Half Pay Leave","අඩ වැටුප්")) years[y].hp+=r.days; else if(r.type===t("No Pay Leave","වැටුප් රහිත")) years[y].np+=r.days; });
   const refNo=`COTR/2/ADM/4/${currYear}-${String(Math.floor(Math.random()*900)+100)}`;
   let rows=""; const ys=Object.keys(years).sort();
   if(!ys.length) rows=`║  ${currYear}  ║       -        ║   -   ║     -      ║    -    ║     -     ║\n`;
@@ -514,7 +514,7 @@ export default function App() {
   const [lang, setLang] = useState("en");  // "en" or "si" (Sinhala)
   // Language helper
   const t = (en, si) => lang==="si" ? si : en;
-  const [form, setForm] = useState({type:"Casual Leave",from:"",to:"",reason:""});
+  const [form, setForm] = useState({type:t("Casual Leave","අනියම් නිවාඩු"),from:"",to:"",reason:""});
   const [formMsg, setFormMsg] = useState(null);
   const [modal, setModal] = useState(null);
   const [attDate, setAttDate] = useState(today());
@@ -598,7 +598,7 @@ export default function App() {
   const ALL_STAFF = [...STAFF, ...extraStaff].filter(e=>!deactivated.includes(e.empNo));
   const myLeaves = currentUser?(leaveRecords[currentUser.empNo]||[]):[];
   const myBalances = currentUser?getLeaveBalance(currentUser,leaveRecords):[];
-  const pending = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status==="Pending").map(r=>({...r,empNo:e})));
+  const pending = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status===t("Pending","අපේක්ෂිත")).map(r=>({...r,empNo:e})));
   // Statuses: Pending → LO Recommended → (Non Academic: Reg Recommended →) Approved/Rejected
   const loRecommended  = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status==="LO Recommended").map(r=>({...r,empNo:e})));
   const regRecommended = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status==="Reg Recommended").map(r=>({...r,empNo:e})));
@@ -610,7 +610,7 @@ export default function App() {
   const notifications = currentUser ? (() => {
     const notifs = [];
     myBalances.forEach(b=>{ if(b.balance!=="∞"&&b.total>0&&b.balance<=3&&b.balance>0) notifs.push({id:`bal-${b.type}`,type:"warn",msg:`⚠️ Only ${b.balance} ${b.type} day(s) remaining for ${currYear}.`}); });
-    if(myBalances.find(b=>b.type==="Casual Leave")?.balance===0) notifs.push({id:"cas-zero",type:"danger",msg:"❌ Casual Leave fully used for this year."});
+    if(myBalances.find(b=>b.type===t("Casual Leave","අනියම් නිවාඩු"))?.balance===0) notifs.push({id:"cas-zero",type:"danger",msg:"❌ Casual Leave fully used for this year."});
     const medOverdue=medCertOverdue(currentUser,leaveRecords);
     if(medOverdue.length>0) notifs.push({id:"med-cert",type:"danger",msg:`🏥 Medical certificate overdue for ${medOverdue.length} leave period(s). Submit immediately.`});
     const ab=isAbnormal(currentUser,leaveRecords);
@@ -652,12 +652,12 @@ export default function App() {
     if(!form.from||!form.to||!form.reason){setFormMsg({t:"error",m:"Fill all fields."});return;}
     const days=countWD(form.from,form.to);
     if(days<=0){setFormMsg({t:"error",m:"No working days in range."});return;}
-    if(form.type==="Casual Leave"&&days>6){setFormMsg({t:"error",m:"Casual leave max 6 days at once."});return;}
+    if(form.type===t("Casual Leave","අනියම් නිවාඩු")&&days>6){setFormMsg({t:"error",m:"Casual leave max 6 days at once."});return;}
     if(form.type==="Maternity Leave"&&currentUser.gender!=="Female"){setFormMsg({t:"error",m:"Maternity leave for female officers only."});return;}
-    if(currentUser.staffGrade==="junior"&&getSvcYears(currentUser.joined)<1&&form.type==="Casual Leave"){setFormMsg({t:"error",m:"Junior staff: casual leave available only after 1 year of continuous service."});return;}
+    if(currentUser.staffGrade==="junior"&&getSvcYears(currentUser.joined)<1&&form.type===t("Casual Leave","අනියම් නිවාඩු")){setFormMsg({t:"error",m:"Junior staff: casual leave available only after 1 year of continuous service."});return;}
     const bal=myBalances.find(b=>b.type===form.type);
     if(bal&&bal.balance!=="∞"&&bal.balance<days){setFormMsg({t:"error",m:`Insufficient ${form.type}. Available: ${bal.balance} days.`});return;}
-    const rec={id:Date.now(),type:form.type,from:form.from,to:form.to,days,reason:form.reason,status:"Pending",appliedOn:today(),approvedOn:"",approvedBy:"",medCertRequired:form.type==="Vacation/Sick Leave"||form.type==="Half Pay Leave",medCertReceived:false};
+    const rec={id:Date.now(),type:form.type,from:form.from,to:form.to,days,reason:form.reason,status:t("Pending","අපේක්ෂිත"),appliedOn:today(),approvedOn:"",approvedBy:"",medCertRequired:form.type==="Vacation/Sick Leave",medCertReceived:false};
     setLeaveRecords(p=>({...p,[currentUser.empNo]:[...(p[currentUser.empNo]||[]),rec]}));
     setFormMsg({t:"success",m:`Submitted! ${days} day(s). Ref: ${today()}-${String(rec.id).slice(-4)}`});
     setForm(f=>({...f,from:"",to:"",reason:""}));
@@ -1018,12 +1018,12 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       <div style={{background:"#ffffff",border:"1px solid #dce3ea",borderRadius:14,flex:1,overflow:"auto",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"1px solid #e2e8f0",position:"sticky",top:0,background:"linear-gradient(135deg,#1e3a5f,#1d4ed8)"}}>
           <div style={{fontWeight:700,fontSize:14,color:"#f1f5f9",flex:1}}>{modal.title}</div>
-          <button style={{...s.btn("primary"),padding:"7px 12px",fontSize:12}} onClick={()=>{navigator.clipboard.writeText(modal.content).then(()=>alert("Copied! Paste into Word or Notepad to print."));}}>📋 Copy</button>
+          <button style={{...s.btn("primary"),padding:"7px 12px",fontSize:12}} onClick={()=>{navigator.clipboard.writeText(modal.content).then(()=>alert("Copied! Paste into Word or Notepad to print."));}}>{t("📋 Copy","📋 පිටපත")}</button>
           <button style={{...s.btn("success"),padding:"7px 12px",fontSize:12,marginLeft:6}} onClick={()=>{
             const w=window.open("","_blank");
             w.document.write("<html><head><title>"+modal.title+"</title><style>body{font-family:'Courier New',monospace;font-size:13px;padding:20px;white-space:pre-wrap;color:#000;background:#fff}@media print{body{padding:10px}}</style></head><body>"+modal.content.replace(/</g,"&lt;").replace(/>/g,"&gt;")+"</body></html>");
             w.document.close();w.focus();setTimeout(()=>w.print(),400);
-          }}>🖨️ Print</button>
+          }}>{t("🖨️ Print","🖨️ මුද්‍රණ")}</button>
           <button style={{...s.btn("outline"),padding:"7px 12px",fontSize:12,marginLeft:6}} onClick={()=>setModal(null)}>✕</button>
         </div>
         <pre style={{fontFamily:"'Courier New',monospace",fontSize:10,color:"#0f172a",whiteSpace:"pre-wrap",padding:16,lineHeight:1.65,flex:1,overflow:"auto",fontSize:12}}>{modal.content}</pre>
@@ -1036,13 +1036,13 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"#f0f4f8"}}>
       <div style={{...s.card,width:"100%",maxWidth:340,padding:24}}>
         <div style={{fontWeight:700,marginBottom:16,fontSize:16}}>🔑 Change PIN</div>
-        <label style={s.label}>New PIN</label>
+        <label style={s.label}>{t("New PIN","නව PIN")}</label>
         <input type="password" style={{...s.input,marginBottom:10,letterSpacing:8,fontSize:20,textAlign:"center"}} value={newPin} onChange={e=>setNewPin(e.target.value)} maxLength={8} placeholder="••••" />
-        <label style={s.label}>Confirm PIN</label>
+        <label style={s.label}>{t("Confirm PIN","PIN තහවුරු")}</label>
         <input type="password" style={{...s.input,marginBottom:16,letterSpacing:8,fontSize:20,textAlign:"center"}} value={confirmPin} onChange={e=>setConfirmPin(e.target.value)} maxLength={8} placeholder="••••" onKeyDown={e=>e.key==="Enter"&&changePin()} />
         <div style={{display:"flex",gap:8}}>
           <button style={{...s.btn("success"),flex:1,padding:"12px 0"}} onClick={changePin}>Save</button>
-          <button style={{...s.btn("outline"),flex:1,padding:"12px 0"}} onClick={()=>setPinModal(false)}>Cancel</button>
+          <button style={{...s.btn("outline"),flex:1,padding:"12px 0"}} onClick={()=>setPinModal(false)}>{t("Cancel","අවලංගු කරන්න")}</button>
         </div>
       </div>
     </div>
@@ -1054,8 +1054,8 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   if(!dbReady) return(
     <div style={{minHeight:"100vh",background:"#f0f4f8",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"Segoe UI,system-ui,sans-serif"}}>
       <img src={LOGO_96} alt="COT" style={{width:72,height:72,borderRadius:16,objectFit:"cover",boxShadow:"0 4px 16px rgba(0,0,0,0.3)"}} />
-      <div style={{fontSize:20,fontWeight:700,color:"#1a3a5c"}}>COT Ratnapura</div>
-      <div style={{fontSize:14,color:"#64748b"}}>Loading system data...</div>
+      <div style={{fontSize:20,fontWeight:700,color:"#1a3a5c"}}>{t("COT Ratnapura","COT රත්නපුර")}</div>
+      <div style={{fontSize:14,color:"#64748b"}}>{t("Loading system data...","දත්ත පූරණය වෙමින්...")}</div>
       <div style={{width:40,height:40,border:"4px solid #dce3ea",borderTop:"4px solid #1a3a5c",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
       <style>{"@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}"}</style>
       {dbError&&<div style={{fontSize:12,color:"#b91c1c",background:"#fde8e8",padding:"8px 16px",borderRadius:8,maxWidth:300,textAlign:"center"}}>Database connection issue - working in offline mode</div>}
@@ -1076,7 +1076,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           </div>
           <div style={{textAlign:"center",marginBottom:32}}>
             <img src={LOGO_96} alt="COT Ratnapura" style={{width:90,height:90,borderRadius:18,objectFit:"cover",margin:"0 auto 14px",display:"block",boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}} />
-            <div style={{fontSize:22,fontWeight:800,color:"#f1f5f9"}}>COT Ratnapura</div>
+            <div style={{fontSize:22,fontWeight:800,color:"#f1f5f9"}}>{t("COT Ratnapura","COT රත්නපුර")}</div>
             <div style={{fontSize:13,color:C.accent,fontWeight:600}}>Leave Management System</div>
             <div style={{fontSize:11,color:"#1e3a52",marginTop:6}}>Department of Technical Education and Training</div>
           </div>
@@ -1085,13 +1085,13 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             <div style={{fontSize:28}}>{ROLE_META[empRole]?.icon}</div>
             <div><div style={{fontSize:14,fontWeight:700}}>{empMatch.fullName}</div><div style={{fontSize:11,color:C.muted}}>{empMatch.designation} · <span style={{color:ROLE_META[empRole]?.color,fontWeight:700}}>{ROLE_META[empRole]?.label}</span></div></div>
           </div>}
-          <label style={s.label}>Employee Number or Name</label>
+          <label style={s.label}>{t("Employee Number or Name","Employee අංකය")}</label>
           <input style={{...s.input,marginBottom:12,fontSize:16}} value={loginEmp} onChange={e=>{setLoginEmp(e.target.value);setLoginErr("");}} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="e.g. 11004 or Kanthi" autoFocus />
           <>
-            <label style={s.label}>PIN</label>
+            <label style={s.label}>{t("PIN","PIN")}</label>
             <input type="password" style={{...s.input,marginBottom:12,letterSpacing:12,fontSize:24,textAlign:"center"}} value={loginPin} onChange={e=>setLoginPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} maxLength={8} placeholder="••••" />
           </>}
-          <button style={{...s.btn("primary"),width:"100%",padding:"14px 0",fontSize:16}} onClick={doLogin}>Sign In →</button>
+          <button style={{...s.btn("primary"),width:"100%",padding:"14px 0",fontSize:16}} onClick={doLogin}>{t("Sign In →","ඇතුළු වෙන්න →")}</button>
           <div style={{...s.card,marginTop:20,padding:14}}>
             <div style={{fontSize:11,color:C.muted,marginBottom:8,fontWeight:700}}>Default PINs (change after first login)</div>
             {[{r:"Director",e:"11004",p:"1234"},{r:"Registrar",e:"250015",p:"5678"},{r:"Leave Officer",e:"20990",p:"1111"},{r:"ICT Officer",e:"255003",p:"2222"}].map(x=>(
@@ -1109,7 +1109,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:"Pending"},{k:"register",i:"📓",l:"Register"},{k:"alerts",i:"🚨",l:"Alerts"},{k:"chat",i:"🤖",l:"AI"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"register",i:"📓",l:"Register"},{k:"alerts",i:"🚨",l:"Alerts"},{k:"chat",i:"🤖",l:"AI"}],
     registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"letters",i:"📄",l:"Letters"},{k:"chat",i:"🤖",l:"AI"}],
     director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
     ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"🖐",l:"Scan"},{k:"monthly",i:"📊",l:"Monthly"},{k:"chat",i:"🤖",l:"AI"}],
@@ -1156,9 +1156,9 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
 
         {/* Leave balance cards */}
         {userRole==="staff"&&<>
-          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Leave Balance {currYear}</div>
+          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("Leave Balance","නිවාඩු ශේෂය")} {currYear}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12,marginBottom:16}}>
-            {myBalances.filter(b=>b.total>0||b.type==="Half Pay Leave").slice(0,4).map(b=>(
+            {myBalances.filter(b=>b.total>0).slice(0,4).map(b=>(
               <div key={b.type} style={{...s.card,borderColor:b.color+"33",background:b.color+"0a",padding:"14px 14px"}}>
                 <div style={{fontSize:28,fontWeight:800,color:b.color,lineHeight:1}}>{b.balance}</div>
                 <div style={{fontSize:10,color:"#94a3b8",marginTop:3}}>{b.icon} {b.type}</div>
@@ -1182,9 +1182,62 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           </div>
         )}
 
+        {/* Leave balance + quick apply for ALL roles */}
+        {userRole!=="staff"&&<>
+          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("My Leave Balance","මගේ නිවාඩු ශේෂය")} {currYear}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:12}}>
+            {getLeaveBalance(currentUser,leaveRecords,currYear).filter(b=>b.total>0).slice(0,4).map(b=>(
+              <div key={b.type} style={{...s.card,borderColor:b.color+"33",background:b.color+"0a",padding:"12px 12px"}}>
+                <div style={{fontSize:26,fontWeight:800,color:b.color,lineHeight:1}}>{b.balance}</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>{b.icon} {b.type}</div>
+                <div style={{fontSize:9,color:"#334155"}}>{b.used} {t("used","භාවිත")} / {b.total} {t("total","මුළු")}</div>
+              </div>
+            ))}
+          </div>
+          <button style={{...s.btn("primary"),width:"100%",padding:"12px 0",marginBottom:14,fontSize:14}} onClick={()=>setTab("myapply")}>
+            📝 {t("Apply for Leave","නිවාඩු ඉල්ලීමක් ඉදිරිපත් කරන්න")}
+          </button>
+          {/* Recent leave records */}
+          {(leaveRecords[currentUser.empNo]||[]).length>0&&<>
+            <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("My Recent Leaves","මගේ මෑත නිවාඩු")}</div>
+            {[...(leaveRecords[currentUser.empNo]||[])].reverse().slice(0,3).map(r=>(
+              <div key={r.id} style={{...s.card,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",marginBottom:6}}>
+                <div><div style={{fontSize:13,fontWeight:600}}>{r.type}</div><div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · {r.days}d</div></div>
+                <span style={s.badge(r.status)}>{r.status}</span>
+              </div>
+            ))}
+          </>}
+        </>}
+
+
+        {/* Leave balance + quick apply for officers (non-staff roles) */}
+        {userRole!=="staff"&&<>
+          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("My Leave Balance","මගේ නිවාඩු ශේෂය")} {currYear}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:12}}>
+            {getLeaveBalance(currentUser,leaveRecords,currYear).filter(b=>b.total>0).slice(0,4).map(b=>(
+              <div key={b.type} style={{...s.card,borderColor:b.color+"33",background:b.color+"0a",padding:"12px 12px"}}>
+                <div style={{fontSize:26,fontWeight:800,color:b.color,lineHeight:1}}>{b.balance}</div>
+                <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>{b.icon} {b.type}</div>
+                <div style={{fontSize:9,color:"#334155"}}>{b.used} {t("used","භාවිත")} / {b.total} {t("total","මුළු")}</div>
+              </div>
+            ))}
+          </div>
+          <button style={{...s.btn("primary"),width:"100%",padding:"12px 0",marginBottom:14,fontSize:14}} onClick={()=>setTab("myapply")}>
+            📝 {t("Apply for Leave","නිවාඩු ඉල්ලීම")}
+          </button>
+          {(leaveRecords[currentUser.empNo]||[]).length>0&&<>
+            <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("My Recent Leaves","මගේ මෑත නිවාඩු")}</div>
+            {[...(leaveRecords[currentUser.empNo]||[])].reverse().slice(0,3).map(r=>(
+              <div key={r.id} style={{...s.card,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",marginBottom:6}}>
+                <div><div style={{fontSize:13,fontWeight:600}}>{r.type}</div><div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · {r.days}d</div></div>
+                <span style={s.badge(r.status)}>{r.status}</span>
+              </div>
+            ))}
+          </>}
+        </>}
         {/* Recent applications for staff */}
         {userRole==="staff"&&myLeaves.length>0&&<>
-          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Recent Applications</div>
+          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("Recent Applications","මෑත ඉල්ලීම්")}</div>
           {[...myLeaves].reverse().slice(0,3).map(r=>(
             <div key={r.id} style={{...s.card,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px"}}>
               <div><div style={{fontSize:13,fontWeight:600}}>{r.type}</div><div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · {r.days}d</div></div>
@@ -1201,9 +1254,9 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📝 Apply for Leave</div>
         {formMsg&&<div style={s.alertBox(formMsg.t)}>{formMsg.t==="error"?"❌":"✅"} {formMsg.m}</div>}
         {svcBanner}
-        <label style={s.label}>Leave Type</label>
+        <label style={s.label}>{t("Leave Type","නිවාඩු වර්ගය")}</label>
         <select style={{...s.select,marginBottom:12}} value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
-          {["Casual Leave","Vacation/Sick Leave","Compensatory Leave","Half Pay Leave","No Pay Leave","Maternity Leave","Special Leave","Study Leave (Local)"].map(t=><option key={t}>{t}</option>)}
+          {[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Compensatory Leave","හිලව් නිවාඩු"),"Maternity Leave","Special Leave","Study Leave (Local)"].map(t=><option key={t}>{t}</option>)}
         </select>
         {myBalances.filter(b=>b.type===form.type).map(b=>(
           b.total>0&&<div key={b.type} style={{background:b.color+"0f",border:`1px solid ${b.color}33`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1213,6 +1266,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         ))}
         {form.type==="Maternity Leave"&&currentUser.gender!=="Female"&&<div style={s.alertBox("error")}>❌ Maternity leave for female officers only.</div>}
         {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏥 Medical certificate required within 3 working days of leave commencement.</div>}
+        {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>💡 If you exceed your annual Vacation/Sick leave entitlement, the excess days are automatically treated as No Pay Leave by the Department — you do not need to apply for No Pay Leave separately. If you have accumulated Vacation/Sick leave from previous years, you may use that balance to cover the excess.</div>}
         {form.type==="Study Leave (Local)"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>📚 Max 10 days, once per degree, for PG exam preparation only (PAC 23/2014).</div>}
         <label style={s.label}>From Date</label>
         <input type="date" style={{...s.input,marginBottom:12}} value={form.from} onChange={e=>setForm(f=>({...f,from:e.target.value}))} />
@@ -1220,20 +1274,142 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         <input type="date" style={{...s.input,marginBottom:10}} value={form.to} onChange={e=>setForm(f=>({...f,to:e.target.value}))} />
         {form.from&&form.to&&<div style={{padding:"10px 14px",background:"rgba(56,189,248,0.08)",borderRadius:9,fontSize:13,color:C.accent,border:"1px solid rgba(56,189,248,0.2)",marginBottom:12}}>
           📅 Working days: <b>{countWD(form.from,form.to)}</b> — weekends & holidays excluded
-          {form.type==="Casual Leave"&&countWD(form.from,form.to)>6&&<div style={{color:C.danger,marginTop:4,fontSize:12}}>⚠️ Exceeds 6-day casual leave limit</div>}
+          {form.type===t("Casual Leave","අනියම් නිවාඩු")&&countWD(form.from,form.to)>6&&<div style={{color:C.danger,marginTop:4,fontSize:12}}>⚠️ Exceeds 6-day casual leave limit</div>}
         </div>}
         <label style={s.label}>Reason *</label>
         <textarea style={{...s.input,minHeight:80,resize:"vertical",marginBottom:12}} value={form.reason} onChange={e=>setForm(f=>({...f,reason:e.target.value}))} placeholder="State reason clearly..." />
         <div style={{padding:"10px 14px",background:"rgba(255,255,255,0.02)",borderRadius:8,fontSize:11,color:"#334155",marginBottom:14}}>💡 Urgent absence? Inform Director by SMS/email/phone first, then submit this form (PAC 24/2013 s.1:5).</div>
-        <button style={{...s.btn("primary"),width:"100%",padding:"14px 0",fontSize:15}} onClick={submitLeave}>Submit Application</button>
+        <button style={{...s.btn("primary"),width:"100%",padding:"14px 0",fontSize:15}} onClick={submitLeave}>{t("Submit Application","ඉල්ලීම ඉදිරිපත් කරන්න")}</button>
       </div>
     );
+
+
+    // ── MY LEAVE (Director/Registrar/LeaveOfficer/ICT) ──────────
+    if(tab==="myapply") {
+      const myOfficerLeaves = (leaveRecords[currentUser.empNo]||[]);
+      const officerBals = getLeaveBalance(currentUser, leaveRecords, currYear);
+      
+      // Sub-tabs: Apply | Records
+      const subTab = myLeaveSubTab;
+      const setSubTab = setMyLeaveSubTab;
+
+      // Approval workflow for officers applying leave:
+      // Director → directly approved (no workflow needed - or informs DG)
+      // Registrar → Director approves
+      // Leave Officer → Director approves (Non Academic workflow)
+      // ICT Officer → Director approves
+      const getWorkflow = () => {
+        if(userRole==="director") return "⚠️ As Director, you must inform the Director General (DG) the day before taking leave (DTET Circular DTET/04/PF/01/15).";
+        if(userRole==="registrar") return "Your leave requires Director approval.";
+        if(userRole==="leave_officer") return "Your leave follows Non Academic workflow: Registrar recommends → Director approves.";
+        if(userRole==="ict_officer") return "Your leave requires Director approval.";
+        return "";
+      };
+
+      return(
+        <div>
+          <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>📝 {t("My Leave","මගේ නිවාඩු")}</div>
+          
+          {/* Sub-tab switcher */}
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            {[{k:"apply",l:t("Apply Leave","නිවාඩු ඉල්ලීම")},{k:"records",l:t("My Records","මගේ වාර්තා")},{k:"balance",l:t("Balance","ශේෂය")}].map(st=>(
+              <button key={st.k} style={{...s.btn(subTab===st.k?"primary":"outline"),padding:"9px 14px",fontSize:12,flex:1}} onClick={()=>setSubTab(st.k)}>{st.l}</button>
+            ))}
+          </div>
+
+          {/* ── Apply Leave sub-tab ── */}
+          {subTab==="apply"&&<>
+            <div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
+              📋 {getWorkflow()}
+            </div>
+            {formMsg&&<div style={s.alertBox(formMsg.t)}>{formMsg.t==="error"?"❌":"✅"} {formMsg.m}</div>}
+            {svcBanner}
+            <label style={s.label}>{t("Leave Type","නිවාඩු වර්ගය")}</label>
+            <select style={{...s.select,marginBottom:12}} value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
+              <option value="">{t("— Select leave type —","— නිවාඩු වර්ගය —")}</option>
+              {[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Compensatory Leave","හිලව් නිවාඩු"),"Special Leave","Study Leave (Local)"].map(lt=>(
+                <option key={lt} value={lt}>{lt}</option>
+              ))}
+            </select>
+            {officerBals.filter(b=>b.type===form.type&&b.total>0).map(b=>(
+              <div key={b.type} style={{background:b.color+"0f",border:`1px solid ${b.color}33`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:12,color:"#94a3b8"}}>{b.icon} {b.type}</span>
+                <span style={{fontSize:18,fontWeight:800,color:b.color}}>{b.balance} {t("days left","දින ඉතිරි")}</span>
+              </div>
+            ))}
+            {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏥 {t("Medical certificate required within 3 working days.","වෛද්‍ය සහතිකය වැඩ කරන දින 3ක් ඇතුළත.")}</div>}
+            {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>💡 {t("If Vacation/Sick leave is exceeded, the Department applies No Pay automatically. If you have accumulated leave from previous years, it can cover the excess.","විවේක/අසනීප නිවාඩු ඉක්මවුවහොත් දෙපාර්තමේන්තුව ස්වයංක්‍රීයව No Pay ලෙස සලකයි. කලින් සිට රැස් කළ නිවාඩු ඇත්නම් එය භාවිත කළ හැක.")}</div>}
+            {userRole==="director"&&form.type&&<div style={{...s.alertBox("warn"),marginBottom:10}}>⚠️ {t("You must inform the Director General the day before your leave.","ඔබ නිවාඩු ගැනීමට පෙර දිනයේ Director General ට දැනුම් දිය යුතුය.")}</div>}
+            <label style={s.label}>{t("From Date","ආරම්භ දිනය")}</label>
+            <input type="date" style={{...s.input,marginBottom:12}} value={form.from} onChange={e=>setForm(f=>({...f,from:e.target.value}))} />
+            <label style={s.label}>{t("To Date","අවසාන දිනය")}</label>
+            <input type="date" style={{...s.input,marginBottom:10}} value={form.to} onChange={e=>setForm(f=>({...f,to:e.target.value}))} />
+            {form.from&&form.to&&<div style={{padding:"10px 14px",background:"rgba(56,189,248,0.08)",borderRadius:9,fontSize:13,color:C.accent,border:"1px solid rgba(56,189,248,0.2)",marginBottom:12}}>
+              📅 {t("Working days","වැඩ කරන දින")}: <b>{countWD(form.from,form.to)}</b>
+            </div>}
+            <label style={s.label}>{t("Reason","හේතුව")} *</label>
+            <textarea style={{...s.input,minHeight:80,resize:"vertical",marginBottom:14}} value={form.reason} onChange={e=>setForm(f=>({...f,reason:e.target.value}))} placeholder={t("State reason clearly...","හේතුව පැහැදිලිව සඳහන් කරන්න...")} />
+            {/* Acting officer - same designation */}
+            {form.type&&form.from&&<>
+              <label style={s.label}>{t("Acting Officer","වැඩ ආවරණ නිලධාරී")}</label>
+              <select style={{...s.select,marginBottom:14}} value={actingEmpNo} onChange={e=>setActingEmpNo(e.target.value)}>
+                <option value="">{t("— Select acting officer —","— වැඩ ආවරණ —")}</option>
+                {STAFF.filter(e=>e.empNo!==currentUser.empNo&&(e.designation===currentUser.designation||["Management Service Officer","Development Officer"].includes(e.designation))).map(e=>(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName} — {e.designation}</option>
+                ))}
+              </select>
+            </>}
+            <button style={{...s.btn("primary"),width:"100%",padding:"14px 0",fontSize:15}} onClick={submitLeave}>{t("📝 Submit Application","📝 ඉල්ලීම ඉදිරිපත් කරන්න")}</button>
+          </>}
+
+          {/* ── My Records sub-tab ── */}
+          {subTab==="records"&&<>
+            {myOfficerLeaves.length===0
+              ?<div style={{...s.card,textAlign:"center",padding:40,color:C.muted}}>{t("No leave records yet","නිවාඩු වාර්තා නැත")}</div>
+              :[...myOfficerLeaves].reverse().map(r=>(
+                <div key={r.id} style={{...s.card,marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700}}>{r.type}</div>
+                      <div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> {t("days","දින")}</div>
+                      <div style={{fontSize:10,color:"#334155",marginTop:2}}>{r.reason?.substring(0,50)}</div>
+                    </div>
+                    <span style={s.badge(r.status)}>{r.status}</span>
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,currentUser)})}>📄 125a</button>
+                    {r.status==="Approved"&&<button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 190 Entry",content:genForm190Entry(r,currentUser)})}>📓 190</button>}
+                  </div>
+                </div>
+              ))
+            }
+          </>}
+
+          {/* ── Balance sub-tab ── */}
+          {subTab==="balance"&&<>
+            <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8}}>{t("Leave Balance for","නිවාඩු ශේෂය")} {currYear}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+              {officerBals.filter(b=>b.total>0).map(b=>(
+                <div key={b.type} style={{...s.card,borderColor:b.color+"33",background:b.color+"0a",padding:"14px 12px"}}>
+                  <div style={{fontSize:26,fontWeight:800,color:b.color}}>{b.balance}</div>
+                  <div style={{fontSize:10,color:"#94a3b8"}}>{b.icon} {b.type}</div>
+                  <div style={{fontSize:10,color:"#334155"}}>{b.used} {t("used","භාවිත")} / {b.total} {t("total","මුළු")}</div>
+                </div>
+              ))}
+            </div>
+            <button style={{...s.btn("primary"),width:"100%",padding:"12px 0"}} onClick={()=>setModal({title:`Leave Summary — ${currentUser.fullName}`,content:genLeaveSummary(currentUser,leaveRecords,`${currYear}-01-01`,today(),`Year ${currYear}`)})}>
+              📊 {t("Generate Summary Report","සාරාංශ වාර්තාව")}
+            </button>
+          </>}
+        </div>
+      );
+    }
 
     // ── MY RECORDS ──────────────────────────────────────────────
     if(tab==="records") return(
       <div>
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📋 My Leave Records</div>
-        {myLeaves.length===0?<div style={{...s.card,textAlign:"center",padding:40,color:C.muted}}>No records yet</div>:
+        {myLeaves.length===0?<div style={{...s.card,textAlign:"center",padding:40,color:C.muted}}>{t(t("No records yet","වාර්තා නැත"),"වාර්තා නැත")}</div>:
         [...myLeaves].reverse().map(r=>(
           <div key={r.id} style={{...s.card,marginBottom:10}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -1242,7 +1418,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             </div>
             {r.medCertRequired&&!r.medCertReceived&&r.status==="Approved"&&<div style={{fontSize:11,color:C.danger,background:"#ef444415",padding:"4px 8px",borderRadius:6,marginBottom:6}}>⚠️ Medical certificate not yet submitted</div>}
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,currentUser)})}>📄 125a</button>
+              <button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,currentUser)})}>{t("📄 125a","📄 125a")}</button>
               {r.status==="Approved"&&<button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 190 Entry",content:genForm190Entry(r,currentUser)})}>📓 190</button>}
             </div>
           </div>
@@ -1274,12 +1450,12 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           <label style={s.label}>Period</label>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
             {["year","month","custom"].map(p=>(
-              <button key={p} style={{...s.btn(summaryPeriod===p?"primary":""),padding:"10px 0",fontSize:13}} onClick={()=>setSummaryPeriod(p)}>{p==="year"?"This Year":p==="month"?"This Month":"Custom"}</button>
+              <button key={p} style={{...s.btn(summaryPeriod===p?"primary":""),padding:"10px 0",fontSize:13}} onClick={()=>setSummaryPeriod(p)}>{p==="year"?"This Year":p==="month"?"This Month":t("Custom","අභිරුචි")}</button>
             ))}
           </div>
           {summaryPeriod==="custom"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-            <div><label style={s.label}>From</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
-            <div><label style={s.label}>To</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
+            <div><label style={s.label}>{t("From","සිට")}</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
+            <div><label style={s.label}>{t("To","දක්වා")}</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
           </div>}
           {targetEmp&&<>
             {/* Balance cards */}
@@ -1304,7 +1480,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     // ── AI CHAT ──────────────────────────────────────────────────
     if(tab==="chat") return(
       <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 160px)"}}>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>🤖 AI Leave Assistant</div>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>{t("🤖 AI Leave Assistant","🤖 AI නිවාඩු සහාය")}</div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:10}}>
           {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#1e3a52"}}>Responds in English or Sinhala.</span></div>}
           {chatMsgs.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}><div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"#1565c0":"#f0f4f8",fontSize:13,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.text}</div></div>)}
@@ -1540,12 +1716,12 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     // ── REPORTS ──────────────────────────────────────────────────
     if(tab==="reports") return(
       <div>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📑 Reports & Letters</div>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>{t("📑 Reports & Letters","📑 වාර්තා සහ ලිපි")}</div>
 
         {/* ── Gen 190 Monthly Report ── */}
         <div style={{...{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.15)"},padding:"12px 14px",marginBottom:10}}>
           <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📓 Monthly Leave Register — Gen 190</div>
-          <label style={{...s.label}}>Select Month</label>
+          <label style={{...s.label}}>{t("Select Month","මාසය තෝරන්න")}</label>
           <input type="month" style={{...s.input,marginBottom:10}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
           <button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>setModal({title:`Gen 190 — ${reportMonth}`,content:genMonthlyGen190(leaveRecords,reportMonth)})}>
             📓 Generate Gen 190 Report
@@ -1555,17 +1731,17 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         {/* ── Leave Summary per staff ── */}
         <div style={{...{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.15)"},padding:"12px 14px",marginBottom:10}}>
           <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📊 Leave Summary — Any Staff Member</div>
-          <label style={{...s.label}}>Staff Member</label>
+          <label style={{...s.label}}>{t("Staff Member","සේවකයා")}</label>
           <select style={{...s.select,marginBottom:8}} value={summaryEmp} onChange={e=>setSummaryEmp(e.target.value)}>
             <option value="">— Select staff member —</option>
             {STAFF.filter(e=>userRole==="registrar"?e.section==="Non Academic":true).map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
           </select>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-            {["year","month","custom"].map(p=><button key={p} style={{...s.btn(summaryPeriod===p?"gold":"outline"),padding:"8px 0",fontSize:11}} onClick={()=>setSummaryPeriod(p)}>{p==="year"?"This Year":p==="month"?"This Month":"Custom"}</button>)}
+            {["year","month","custom"].map(p=><button key={p} style={{...s.btn(summaryPeriod===p?"gold":"outline"),padding:"8px 0",fontSize:11}} onClick={()=>setSummaryPeriod(p)}>{p==="year"?"This Year":p==="month"?"This Month":t("Custom","අභිරුචි")}</button>)}
           </div>
           {summaryPeriod==="custom"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-            <div><label style={{...s.label}}>From</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
-            <div><label style={{...s.label}}>To</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
+            <div><label style={{...s.label}}>{t("From","සිට")}</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
+            <div><label style={{...s.label}}>{t("To","දක්වා")}</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
           </div>}
           {summaryEmp&&<button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>{
             const emp=STAFF.find(e=>e.empNo===summaryEmp);
@@ -1574,7 +1750,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             const to=summaryPeriod==="custom"?summaryTo:today();
             const label=summaryPeriod==="year"?`Year ${currYear}`:summaryPeriod==="month"?`Month ${today().slice(0,7)}`:`${summaryFrom} to ${summaryTo}`;
             setModal({title:`Leave Summary — ${emp.fullName}`,content:genLeaveSummary(emp,leaveRecords,from,to,label)});
-          }}>📊 Generate Summary Report</button>}
+          }}>{t("📊 Generate Summary Report","📊 සාරාංශ ජනනය")}</button>}
         </div>
 
         {/* ── DTET Letters ── */}
@@ -1586,14 +1762,14 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
                 <div style={{fontSize:14,fontWeight:600,color:"#1a3a5c"}}>{e.fullName}</div>
                 <div style={{fontSize:10,color:"#64748b"}}>{e.designation} · {e.section}</div>
               </div>
-              <button style={{...s.btn("navy"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET — ${e.fullName}`,content:genDTETLetter(e,leaveRecords)})}>📄 DTET</button>
+              <button style={{...s.btn("navy"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET — ${e.fullName}`,content:genDTETLetter(e,leaveRecords)})}>{t("📄 DTET","📄 DTET")}</button>
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               {isAbnormal(e,leaveRecords).abnormal&&(
-                <button style={{...s.btn("danger"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Advisory — ${e.fullName}`,content:genAbnormalLetter(e,leaveRecords)})}>🚨 Advisory Letter</button>
+                <button style={{...s.btn("danger"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Advisory — ${e.fullName}`,content:genAbnormalLetter(e,leaveRecords)})}>{t("🚨 Advisory Letter","🚨 උපදේශ ලිපිය")}</button>
               )}
               {medCertOverdue(e,leaveRecords).length>0&&(
-                <button style={{...s.btn("warn"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Med Reminder — ${e.fullName}`,content:genMedCertReminder(e,medCertOverdue(e,leaveRecords))})}>🏥 Med Reminder</button>
+                <button style={{...s.btn("warn"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Med Reminder — ${e.fullName}`,content:genMedCertReminder(e,medCertOverdue(e,leaveRecords))})}>{t("🏥 Med Reminder","🏥 වෛද්‍ය")}</button>
               )}
             </div>
           </div>
@@ -1610,7 +1786,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>{e.fullName}</div>
             <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{e.designation}</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <button style={{...s.btn("primary"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET Letter`,content:genDTETLetter(e,leaveRecords)})}>📄 DTET</button>
+              <button style={{...s.btn("primary"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET Letter`,content:genDTETLetter(e,leaveRecords)})}>{t("📄 DTET","📄 DTET")}</button>
               {isAbnormal(e,leaveRecords).abnormal&&<button style={{...s.btn("danger"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`Advisory`,content:genAbnormalLetter(e,leaveRecords)})}>🚨 Advisory</button>}
               {medCertOverdue(e,leaveRecords).length>0&&<button style={{...s.btn("warn"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`Med Cert`,content:genMedCertReminder(e,medCertOverdue(e,leaveRecords))})}>🏥 Reminder</button>}
             </div>
@@ -1622,7 +1798,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     // ── DIRECTOR SETTINGS ────────────────────────────────────────
     if(tab==="settings") return(
       <div>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>⚙️ Settings & Admin</div>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>{t("⚙️ Settings & Admin","⚙️ සැකසුම් සහ පරිපාලන")}</div>
         <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>👥 Add New Staff Member</div>
         <div style={{background:"#fff",border:"1px solid #dce3ea",borderRadius:12,padding:16,marginBottom:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
@@ -1635,11 +1811,11 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             <div><label style={s.label}>Designation *</label><input style={s.input} id="ns-desig" placeholder="e.g. Instructor" /></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-            <div><label style={s.label}>Section</label><select style={s.select} id="ns-sec"><option>Academic</option><option>Non Academic</option></select></div>
+            <div><label style={s.label}>Section</label><select style={s.select} id="ns-sec"><option>{t("Academic","අධ්‍යාපනික")}</option><option>{t("Non Academic","අධ්‍යාපනික නොවන")}</option></select></div>
             <div><label style={s.label}>Grade</label><select style={s.select} id="ns-grade"><option value="officer">Officer</option><option value="junior">Junior</option></select></div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-            <div><label style={s.label}>Gender</label><select style={s.select} id="ns-gender"><option>Male</option><option>Female</option></select></div>
+            <div><label style={s.label}>Gender</label><select style={s.select} id="ns-gender"><option>{t("Male","පුරුෂ")}</option><option>{t("Female","ස්ත්‍රී")}</option></select></div>
             <div><label style={s.label}>Date Joined *</label><input type="date" style={s.input} id="ns-joined" /></div>
           </div>
           <button style={{background:"#1a3a5c",border:"none",borderRadius:8,padding:"12px 0",color:"#fff",fontWeight:700,fontSize:14,width:"100%",cursor:"pointer"}} onClick={()=>{
@@ -1653,7 +1829,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             STAFF.push({empNo:eno,title:document.getElementById("ns-title")?.value,initials:name.split(" ").slice(0,-1).join(" ")+" ",lastName:last,fullName:name,dob:"2000-01-01",nic:"",gender:document.getElementById("ns-gender")?.value,joined,section:document.getElementById("ns-sec")?.value,designation:desig,basicSalary:0,staffGrade:document.getElementById("ns-grade")?.value});
             ["ns-eno","ns-name","ns-last","ns-desig","ns-joined"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
             alert("Added: "+name+" ("+eno+")\nDefault PIN: "+eno.slice(-4));
-          }}>+ Add Staff Member</button>
+          }}>{t("+ Add Staff Member","+ සේවකයා එකතු")}</button>
         </div>
         <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🗑️ Remove Staff Member</div>
         <div style={{background:"#fff",border:"1px solid #dce3ea",borderRadius:12,padding:16,marginBottom:16}}>
@@ -1686,7 +1862,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showAddStaff?12:0}}>
             <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c"}}>{t("Add New Staff Member","නව සේවකයෙකු එකතු කරන්න")}</div>
             <button style={{...s.btn(showAddStaff?"danger":"navy"),padding:"8px 14px",fontSize:12}} onClick={()=>setShowAddStaff(v=>!v)}>
-              {showAddStaff?t("Cancel","අවලංගු කරන්න"):t("+ Add Staff","+ සේවකයා")}
+              {showAddStaff?"Cancel":t("+ Add Staff","+ සේවකයා")}
             </button>
           </div>
           {showAddStaff&&<div>
@@ -1703,14 +1879,14 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
               <div><label style={s.label}>{t("Designation","තනතුර")}</label><input style={s.input} value={newStaffForm.designation} onChange={e=>setNewStaffForm(f=>({...f,designation:e.target.value}))} placeholder="e.g. Instructor" /></div>
               <div><label style={s.label}>{t("Section","අංශය")}</label>
                 <select style={s.select} value={newStaffForm.section} onChange={e=>setNewStaffForm(f=>({...f,section:e.target.value}))}>
-                  <option>Academic</option><option>Non Academic</option>
+                  <option>{t("Academic","අධ්‍යාපනික")}</option><option>{t("Non Academic","අධ්‍යාපනික නොවන")}</option>
                 </select>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
               <div><label style={s.label}>{t("Gender","ස්ත්‍රී/පුරුෂ")}</label>
                 <select style={s.select} value={newStaffForm.gender} onChange={e=>setNewStaffForm(f=>({...f,gender:e.target.value}))}>
-                  <option>Male</option><option>Female</option>
+                  <option>{t("Male","පුරුෂ")}</option><option>{t("Female","ස්ත්‍රී")}</option>
                 </select>
               </div>
               <div><label style={s.label}>{t("Grade","ශ්‍රේණිය")}</label>
@@ -1773,7 +1949,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           </div>}
         </div>
 
-        <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:10,marginTop:16,textTransform:"uppercase"}}>PIN Management</div>
+        <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:10,marginTop:16,textTransform:"uppercase"}}>{t("PIN Management","PIN කළමනාකරණය")}</div>
         {Object.entries(FIXED_ROLES).map(([empNo,role])=>{
           const emp=STAFF.find(e=>e.empNo===empNo);
           return <div key={empNo} style={{...s.card,borderColor:ROLE_META[role]?.color+"33",marginBottom:10}}>
@@ -1784,7 +1960,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             {empNo===currentUser.empNo?<div style={{fontSize:11,color:C.muted}}>Use 🔑 button in header to change your own PIN.</div>:
             <div style={{display:"flex",gap:8}}>
               <input type="password" placeholder="New PIN" style={{...s.input,flex:1,letterSpacing:6,fontSize:16}} value={resetTarget===empNo?resetVal:""} onChange={e=>{setResetTarget(empNo);setResetVal(e.target.value);}} maxLength={8} />
-              <button style={{...s.btn("warn"),padding:"12px 16px"}} onClick={()=>{if(!resetVal||resetVal.length<4){alert("Min 4 digits.");return;}setPins(p=>({...p,[empNo]:resetVal}));setResetTarget("");setResetVal("");alert(`PIN reset for ${emp?.fullName}!`);}}>Reset</button>
+              <button style={{...s.btn("warn"),padding:"12px 16px"}} onClick={()=>{if(!resetVal||resetVal.length<4){alert("Min 4 digits.");return;}setPins(p=>({...p,[empNo]:resetVal}));setResetTarget("");setResetVal("");alert(`PIN reset for ${emp?.fullName}!`);}}>{t("Reset","නැවත සකසන්න")}</button>
             </div>}
           </div>;
         })}
@@ -1828,7 +2004,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           </div>
           {/* Stats row */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:12}}>
-            {[{l:"Present",v:attStats.present,c:C.success},{l:"Minor Late",v:attStats.minor,c:"#84cc16"},{l:"Late (>9)",v:attStats.late,c:C.warn},{l:"Absent",v:attStats.absent,c:C.danger},{l:"On Leave",v:attStats.onLeave,c:C.accent},{l:"Not Marked",v:attStats.noMark,c:C.muted}].map(st=>(
+            {[{l:t("Present","පැමිණ"),v:attStats.present,c:C.success},{l:"Minor Late",v:attStats.minor,c:"#84cc16"},{l:"Late (>9)",v:attStats.late,c:C.warn},{l:t("Absent","නොපැමිණ"),v:attStats.absent,c:C.danger},{l:t("On Leave","නිවාඩු"),v:attStats.onLeave,c:C.accent},{l:"Not Marked",v:attStats.noMark,c:C.muted}].map(st=>(
               <div key={st.l} style={{background:st.c+"14",border:`1px solid ${st.c}22`,borderRadius:8,padding:"8px 4px",textAlign:"center"}}>
                 <div style={{fontSize:18,fontWeight:800,color:st.c}}>{st.v}</div>
                 <div style={{fontSize:9,color:"#94a3b8"}}>{st.l}</div>
@@ -1955,7 +2131,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       return(
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <div style={{fontSize:16,fontWeight:700}}>📊 Monthly Summary</div>
+            <div style={{fontSize:16,fontWeight:700}}>{t("📊 Monthly Summary","📊 මාසික සාරාංශ")}</div>
             <input type="month" style={{...s.input,width:160,fontSize:13,padding:"8px 10px"}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
           </div>
           {STAFF.map(emp=>{
@@ -1987,7 +2163,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
                 <span style={{fontSize:14,fontWeight:800,color:pct>=90?C.success:pct>=75?C.warn:pct>0?C.danger:C.muted}}>{pres>0?pct+"%":"—"}</span>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4,fontSize:10,textAlign:"center",marginBottom:lateC>0||minorL>0||shortMorn+shortEve>0?8:0}}>
-                {[{l:"Worked",v:pres,c:C.success},{l:"Absent",v:abs,c:C.danger},{l:"On Leave",v:onLeave,c:C.accent},{l:"Work Days",v:working,c:C.muted}].map(st=>(
+                {[{l:"Worked",v:pres,c:C.success},{l:t("Absent","නොපැමිණ"),v:abs,c:C.danger},{l:t("On Leave","නිවාඩු"),v:onLeave,c:C.accent},{l:"Work Days",v:working,c:C.muted}].map(st=>(
                   <div key={st.l} style={{background:"rgba(255,255,255,0.04)",borderRadius:6,padding:"4px 2px"}}><div style={{fontWeight:700,color:st.c}}>{st.v}</div><div style={{color:"#334155"}}>{st.l}</div></div>
                 ))}
               </div>
@@ -2098,14 +2274,14 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       <div style={{background:"rgba(8,15,30,0.95)",backdropFilter:"blur(16px)",borderBottom:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <img src={LOGO_64} alt="COT" style={{width:40,height:40,borderRadius:8,objectFit:"cover"}} />
-          <div><div style={{fontSize:13,fontWeight:700,lineHeight:1.2}}>COT Ratnapura</div><div style={{fontSize:9,color:C.muted}}>DTET · Leave Management</div></div>
+          <div><div style={{fontSize:13,fontWeight:700,lineHeight:1.2}}>{t("COT Ratnapura","COT රත්නපුර")}</div><div style={{fontSize:9,color:C.muted}}>DTET · Leave Management</div></div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {notifications.length>0&&<div style={{width:8,height:8,borderRadius:"50%",background:C.danger}}/>}
           {["director","registrar","leave_officer","ict_officer"].includes(userRole)&&
             <button style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.muted,cursor:"pointer",fontSize:13,padding:"6px 10px"}} onClick={()=>setPinModal(true)}>🔑</button>}
           <button style={{background:lang==="si"?"#c4a227":"transparent",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,padding:"6px 10px",fontWeight:700}} onClick={()=>setLang(l=>l==="en"?"si":"en")}>{lang==="en"?"සිං":"EN"}</button>
-          <button style={{background:"none",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:13,padding:"6px 10px"}} onClick={doLogout}>Exit</button>
+          <button style={{background:"none",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:13,padding:"6px 10px"}} onClick={doLogout}>{t("Exit","පිටවෙන්න")}</button>
         </div>
       </div>
       {/* Content */}
