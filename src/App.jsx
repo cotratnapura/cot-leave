@@ -598,7 +598,7 @@ export default function App() {
   const ALL_STAFF = [...STAFF, ...extraStaff].filter(e=>!deactivated.includes(e.empNo));
   const myLeaves = currentUser?(leaveRecords[currentUser.empNo]||[]):[];
   const myBalances = currentUser?getLeaveBalance(currentUser,leaveRecords):[];
-  const pending = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status===t("Pending","අපේක්ෂිත")).map(r=>({...r,empNo:e})));
+  const pending = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status==="Pending"||r.status==="අපේක්ෂිත").map(r=>({...r,empNo:e})));
   // Statuses: Pending → LO Recommended → (Non Academic: Reg Recommended →) Approved/Rejected
   const loRecommended  = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status==="LO Recommended").map(r=>({...r,empNo:e})));
   const regRecommended = Object.entries(leaveRecords).flatMap(([e,rs])=>rs.filter(r=>r.status==="Reg Recommended").map(r=>({...r,empNo:e})));
@@ -657,7 +657,7 @@ export default function App() {
     if(currentUser.staffGrade==="junior"&&getSvcYears(currentUser.joined)<1&&form.type===t("Casual Leave","අනියම් නිවාඩු")){setFormMsg({t:"error",m:"Junior staff: casual leave available only after 1 year of continuous service."});return;}
     const bal=myBalances.find(b=>b.type===form.type);
     if(bal&&bal.balance!=="∞"&&bal.balance<days){setFormMsg({t:"error",m:`Insufficient ${form.type}. Available: ${bal.balance} days.`});return;}
-    const rec={id:Date.now(),type:form.type,from:form.from,to:form.to,days,reason:form.reason,status:t("Pending","අපේක්ෂිත"),appliedOn:today(),approvedOn:"",approvedBy:"",medCertRequired:form.type==="Vacation/Sick Leave",medCertReceived:false};
+    const rec={id:Date.now(),type:form.type,from:form.from,to:form.to,days,reason:form.reason,status:"Pending",appliedOn:today(),approvedOn:"",approvedBy:"",medCertRequired:form.type==="Vacation/Sick Leave",medCertReceived:false};
     setLeaveRecords(p=>({...p,[currentUser.empNo]:[...(p[currentUser.empNo]||[]),rec]}));
     setFormMsg({t:"success",m:`Submitted! ${days} day(s). Ref: ${today()}-${String(rec.id).slice(-4)}`});
     setForm(f=>({...f,from:"",to:"",reason:""}));
@@ -1087,10 +1087,8 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           </div>}
           <label style={s.label}>{t("Employee Number or Name","Employee අංකය")}</label>
           <input style={{...s.input,marginBottom:12,fontSize:16}} value={loginEmp} onChange={e=>{setLoginEmp(e.target.value);setLoginErr("");}} onKeyDown={e=>e.key==="Enter"&&doLogin()} placeholder="e.g. 11004 or Kanthi" autoFocus />
-          <>
-            <label style={s.label}>{t("PIN","PIN")}</label>
-            <input type="password" style={{...s.input,marginBottom:12,letterSpacing:12,fontSize:24,textAlign:"center"}} value={loginPin} onChange={e=>setLoginPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} maxLength={8} placeholder="••••" />
-          </>}
+          <label style={s.label}>{t("PIN","PIN")}</label>
+          <input type="password" style={{...s.input,marginBottom:12,letterSpacing:12,fontSize:24,textAlign:"center"}} value={loginPin} onChange={e=>setLoginPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} maxLength={8} placeholder="••••" />
           <button style={{...s.btn("primary"),width:"100%",padding:"14px 0",fontSize:16}} onClick={doLogin}>{t("Sign In →","ඇතුළු වෙන්න →")}</button>
           <div style={{...s.card,marginTop:20,padding:14}}>
             <div style={{fontSize:11,color:C.muted,marginBottom:8,fontWeight:700}}>Default PINs (change after first login)</div>
@@ -1109,10 +1107,10 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"register",i:"📓",l:"Register"},{k:"alerts",i:"🚨",l:"Alerts"},{k:"chat",i:"🤖",l:"AI"}],
-    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"letters",i:"📄",l:"Letters"},{k:"chat",i:"🤖",l:"AI"}],
-    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
-    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"🖐",l:"Scan"},{k:"monthly",i:"📊",l:"Monthly"},{k:"chat",i:"🤖",l:"AI"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"alerts",i:"🚨",l:"Alerts"},{k:"chat",i:"🤖",l:"AI"}],
+    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
+    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
+    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"monthly",i:"📊",l:"Monthly"},{k:"chat",i:"🤖",l:"AI"}],
   };
   const navItems = navByRole[userRole]||navByRole.staff;
 
