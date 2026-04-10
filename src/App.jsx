@@ -185,7 +185,7 @@ function getLeaveBalance(emp, leaveRecords, year=currYear) {
 
 // Abnormal leave threshold: >15 casual in a year, or >20 vacation in a year
 function isAbnormal(emp, leaveRecords, year=currYear) {
-  const cas=getUsedLeave(emp.empNo,leaveRecords,t("Casual Leave","අනියම් නිවාඩු"),year);
+  const cas=getUsedLeave(emp.empNo,leaveRecords,"Casual Leave",year);
   const vac=getUsedLeave(emp.empNo,leaveRecords,"Vacation/Sick Leave",year);
   const ent=getEntitlement(emp,year);
   return { cas, vac, abnormal: cas>(ent.casual*0.75)||vac>(ent.vacation*0.75), severe: cas>=ent.casual||vac>=ent.vacation };
@@ -194,7 +194,7 @@ function isAbnormal(emp, leaveRecords, year=currYear) {
 // Medical cert overdue: medical leave approved >3 working days ago, no cert noted
 function medCertOverdue(emp, leaveRecords) {
   const overdues=[];
-  (leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved"&&(r.type==="Vacation/Sick Leave"||r.type===t("Half Pay Leave","අඩ වැටුප්"))&&!r.medCertReceived).forEach(r=>{
+  (leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved"&&(r.type==="Vacation/Sick Leave"||r.type==="Half Pay Leave")&&!r.medCertReceived).forEach(r=>{
     const daysSince=Math.floor((new Date()-new Date(r.approvedOn||r.appliedOn))/864e5);
     if(daysSince>3) overdues.push(r);
   });
@@ -292,7 +292,7 @@ function generateScanData(empNo, date) {
 // ═══════════════════════════════════════════════════════════════
 function genForm125a(rec, emp) {
   const ent=getEntitlement(emp,new Date().getFullYear());
-  const isCas=rec.type===t("Casual Leave","අනියම් නිවාඩු")||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
+  const isCas=rec.type==="Casual Leave"||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
   const isVac=rec.type==="Vacation/Sick Leave"||rec.type==="Maternity Leave";
   return `╔══════════════════════════════════════════════════════════════════════════╗
 ║  නිවාඩු ඉල්ලුම් පතුය / APPLICATION FOR LEAVE — General 125 අ/a         ║
@@ -322,9 +322,9 @@ function genForm125a(rec, emp) {
 }
 
 function genForm190Entry(rec, emp) {
-  const isCas=rec.type===t("Casual Leave","අනියම් නිවාඩු")||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
+  const isCas=rec.type==="Casual Leave"||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
   const isVac=rec.type==="Vacation/Sick Leave"||rec.type==="Maternity Leave";
-  const isHP=rec.type===t("Half Pay Leave","අඩ වැටුප්"); const isNP=rec.type===t("No Pay Leave","වැටුප් රහිත");
+  const isHP=rec.type==="Half Pay Leave"; const isNP=rec.type==="No Pay Leave";
   return `║${rec.from.slice(5).padEnd(7)}║${rec.to.slice(5).padEnd(7)}║${isCas?String(rec.days).padEnd(7):"       "}║${isVac?String(rec.days).padEnd(7):"       "}║${"       "}║${"           "}║${isHP?(" - "+rec.days).padEnd(10):"          "}║${isNP?(" - "+rec.days).padEnd(10):"          "}║ ${rec.reason.substring(0,30).padEnd(30)} ║`;
 }
 
@@ -341,7 +341,7 @@ function genMonthlyGen190(leaveRecords, month) {
   STAFF.forEach(emp=>{
     const recs=(leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved"&&r.from.startsWith(month));
     recs.forEach(r=>{
-      const isCas=r.type===t("Casual Leave","අනියම් නිවාඩු")||r.type==="Special Leave"; const isVac=r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave"; const isHP=r.type===t("Half Pay Leave","අඩ වැටුප්"); const isNP=r.type===t("No Pay Leave","වැටුප් රහිත");
+      const isCas=r.type==="Casual Leave"||r.type==="Special Leave"; const isVac=r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave"; const isHP=r.type==="Half Pay Leave"; const isNP=r.type==="No Pay Leave";
       if(isCas) total.cas+=r.days; if(isVac) total.vac+=r.days; if(isHP) total.hp+=r.days; if(isNP) total.np+=r.days;
       lines+=`║${emp.empNo.padEnd(7)}║${emp.fullName.substring(0,31).padEnd(31)}║${r.from.slice(5).padEnd(7)}║${r.to.slice(5).padEnd(7)}║${isCas?String(r.days).padEnd(7):"       "}║${isVac?String(r.days).padEnd(7):"       "}║${"           "}║${isHP?(" - "+r.days).padEnd(10):"          "}║${isNP?(" - "+r.days).padEnd(10):"          "}║ ${r.reason.substring(0,30).padEnd(30)} ║\n`;
     });
@@ -365,7 +365,7 @@ function genLeaveSummary(emp, leaveRecords, from, to, label) {
   out+=`╠══════════════════════╦═════════════╦═════════════╦════════════════════╣\n`;
   out+=`║ Leave Type           ║ Entitlement ║ Used        ║ Balance            ║\n`;
   out+=`╠══════════════════════╬═════════════╬═════════════╬════════════════════╣\n`;
-  const types=[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Half Pay Leave","අඩ වැටුප්"),t("No Pay Leave","වැටුප් රහිත"),"Maternity Leave","Special Leave","Study Leave (Local)"];
+  const types=["Casual Leave","Vacation/Sick Leave","Half Pay Leave","No Pay Leave","Maternity Leave","Special Leave","Study Leave (Local)"];
   const entMap={"Casual Leave":ent.casual,"Vacation/Sick Leave":ent.vacation,"Half Pay Leave":"—","No Pay Leave":"—","Maternity Leave":ent.maternity,"Special Leave":ent.special,"Study Leave (Local)":ent.study};
   types.forEach(t=>{
     const used=totals[t]||0; const e=entMap[t]; const bal=typeof e==="number"?Math.max(0,e-used):"—";
@@ -459,7 +459,7 @@ Registrar, College of Technology Ratnapura`;
 function genDTETLetter(emp, leaveRecords) {
   const recs=(leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved");
   const years={};
-  recs.forEach(r=>{ const y=r.from.slice(0,4); if(!years[y]) years[y]={cas:0,vac:0,hp:0,np:0}; if(r.type===t("Casual Leave","අනියම් නිවාඩු")||r.type==="Special Leave") years[y].cas+=r.days; else if(r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave") years[y].vac+=r.days; else if(r.type===t("Half Pay Leave","අඩ වැටුප්")) years[y].hp+=r.days; else if(r.type===t("No Pay Leave","වැටුප් රහිත")) years[y].np+=r.days; });
+  recs.forEach(r=>{ const y=r.from.slice(0,4); if(!years[y]) years[y]={cas:0,vac:0,hp:0,np:0}; if(r.type==="Casual Leave"||r.type==="Special Leave") years[y].cas+=r.days; else if(r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave") years[y].vac+=r.days; else if(r.type==="Half Pay Leave") years[y].hp+=r.days; else if(r.type==="No Pay Leave") years[y].np+=r.days; });
   const refNo=`COTR/2/ADM/4/${currYear}-${String(Math.floor(Math.random()*900)+100)}`;
   let rows=""; const ys=Object.keys(years).sort();
   if(!ys.length) rows=`║  ${currYear}  ║       -        ║   -   ║     -      ║    -    ║     -     ║\n`;
@@ -514,7 +514,7 @@ export default function App() {
   const [lang, setLang] = useState("en");  // "en" or "si" (Sinhala)
   // Language helper
   const t = (en, si) => lang==="si" ? si : en;
-  const [form, setForm] = useState({type:t("Casual Leave","අනියම් නිවාඩු"),from:"",to:"",reason:""});
+  const [form, setForm] = useState({type:"Casual Leave",from:"",to:"",reason:""});
   const [formMsg, setFormMsg] = useState(null);
   const [modal, setModal] = useState(null);
   const [attDate, setAttDate] = useState(today());
