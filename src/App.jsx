@@ -973,7 +973,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   const C={bg:"#f0f4f8",card:"#ffffff",border:"#e2e8f0",text:"#0f172a",muted:"#64748b",accent:"#1d4ed8",success:"#15803d",warn:"#b45309",danger:"#dc2626",purple:"#7c3aed"};
   const roleCol=ROLE_META[userRole]?.color||C.accent;
   const s={
-    wrap:{minHeight:"100vh",minHeight:"100dvh",width:"100%",background:"#f8fafc",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",color:C.text,paddingBottom:100,fontSize:16},
+    wrap:{minHeight:"100dvh",width:"100%",background:"#f8fafc",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",color:C.text,paddingBottom:100,fontSize:16},
     card:{background:"#ffffff",border:"1px solid #e2e8f0",borderRadius:16,padding:20,marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,0.05),0 4px 12px rgba(0,0,0,0.04)"},
     cardNavy:{background:"linear-gradient(135deg,#1e3a5f,#1d4ed8)",border:"none",borderRadius:16,padding:18,marginBottom:14,boxShadow:"0 4px 16px rgba(29,78,216,0.25)"},
     cardGold:{background:"linear-gradient(135deg,#7a5c00,#c4a227)",border:"none",borderRadius:16,padding:18,marginBottom:14,boxShadow:"0 4px 16px rgba(196,162,39,0.25)"},
@@ -1026,14 +1026,14 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           }}>{t("🖨️ Print","🖨️ මුද්‍රණ")}</button>
           <button style={{...s.btn("outline"),padding:"7px 12px",fontSize:12,marginLeft:6}} onClick={()=>setModal(null)}>✕</button>
         </div>
-        <pre style={{fontFamily:"'Courier New',monospace",fontSize:10,color:"#0f172a",whiteSpace:"pre-wrap",padding:16,lineHeight:1.65,flex:1,overflow:"auto",fontSize:12}}>{modal.content}</pre>
+        <pre style={{fontFamily:"'Courier New',monospace",fontSize:12,color:"#0f172a",whiteSpace:"pre-wrap",padding:16,lineHeight:1.65,flex:1,overflow:"auto"}}>{modal.content}</pre>
       </div>
     </div>
   ):null;
 
   // PIN Modal
   const PinModal = pinModal?(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:998,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"#f0f4f8"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:998,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <div style={{...s.card,width:"100%",maxWidth:340,padding:24}}>
         <div style={{fontWeight:700,marginBottom:16,fontSize:16}}>🔑 Change PIN</div>
         <label style={s.label}>{t("New PIN","නව PIN")}</label>
@@ -2167,7 +2167,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
               </div>
               {(lateC>0||minorL>0||shortMorn+shortEve>0)&&<div style={{fontSize:10,color:"#475569",borderTop:"1px solid rgba(255,255,255,0.05)",paddingTop:6,display:"flex",gap:8,flexWrap:"wrap"}}>
                 {minorL>0&&<span style={{color:"#84cc16"}}>⏱ Minor late: {minorL} ({minorPairs} pair{minorPairs!==1?"s":""} forgiven)</span>}
-                {lateC>0&&<span style={{color:C.warn}}>🔴 Late (>9): {lateC}</span>}
+                {lateC>0&&<span style={{color:C.warn}}>🔴 Late ({">"}9): {lateC}</span>}
                 {shortMorn>0&&<span style={{color:C.purple}}>🌅 AM short: {shortMorn}</span>}
                 {shortEve>0&&<span style={{color:C.purple}}>🌇 PM short: {shortEve}</span>}
               </div>}
