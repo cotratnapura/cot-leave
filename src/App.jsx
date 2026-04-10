@@ -529,6 +529,7 @@ export default function App() {
   const [notifDismissed, setNotifDismissed] = useState([]);
   const chatEnd = useRef(null);
   const [chatMsgs, setChatMsgs] = useState([]); const [chatInput, setChatInput] = useState(""); const [chatLoading, setChatLoading] = useState(false); const [showChat, setShowChat] = useState(false);
+  const [myLeaveSubTab,setMyLeaveSubTab]=useState("apply");
   useEffect(()=>{ chatEnd.current?.scrollIntoView({behavior:"smooth"}); },[chatMsgs]);
 
   // ── Load all data from Supabase on startup ────────────────────
@@ -647,8 +648,7 @@ export default function App() {
   }
 
   // ── Leave actions ─────────────────────────────────────────────
-  function submitLeave(e){
-    e.preventDefault();
+  function submitLeave(){
     if(!form.from||!form.to||!form.reason){setFormMsg({t:"error",m:"Fill all fields."});return;}
     const days=countWD(form.from,form.to);
     if(days<=0){setFormMsg({t:"error",m:"No working days in range."});return;}
