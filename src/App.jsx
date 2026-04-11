@@ -139,11 +139,16 @@ function getEntitlement(emp, year) {
     // Officer: casual = 21 from any appointment date in that calendar year
     casual = svcYearsAtYearStart >= -1 ? 21 : 0; // available from joined year
     // Vacation: first 2 years on appointment basis (24/yr), then calendar year basis
-    const twoYearDate = new Date(joined); twoYearDate.setFullYear(twoYearDate.getFullYear()+2);
-    if (yearStart >= twoYearDate) vacation = 24;
-    else {
-      const monthsInYear = Math.min(12, Math.max(0, (Math.min(yearEnd, twoYearDate) - Math.max(yearStart, joined)) / (30.44*864e5)));
+    // Officers entitled to 24 vacation/sick days per year (Ch.XII Estab. Code)
+    // Prorated only in the year of first appointment
+    if (svcYearsAtYearStart >= 1) {
+      vacation = 24; // full entitlement after 1st year
+    } else if (svcYearsAtYearStart >= 0) {
+      // First year: prorate from joining date
+      const monthsInYear = Math.min(12, Math.max(0, (yearEnd - joined) / (30.44*864e5)));
       vacation = Math.round((24/12)*monthsInYear);
+    } else {
+      vacation = 0; // not yet joined
     }
   }
   return { casual, vacation, halfPay:0, noPay:0, maternity: emp.gender==="Female"?84:0, special:5, study:10 };
@@ -653,7 +658,6 @@ export default function App() {
     const days=countWD(form.from,form.to);
     if(days<=0){setFormMsg({t:"error",m:"No working days in range."});return;}
     if(form.type===t("Casual Leave","අනියම් නිවාඩු")&&days>6){setFormMsg({t:"error",m:"Casual leave max 6 days at once."});return;}
-    if(form.type==="Maternity Leave"&&currentUser.gender!=="Female"){setFormMsg({t:"error",m:"Maternity leave for female officers only."});return;}
     if(currentUser.staffGrade==="junior"&&getSvcYears(currentUser.joined)<1&&form.type===t("Casual Leave","අනියම් නිවාඩු")){setFormMsg({t:"error",m:"Junior staff: casual leave available only after 1 year of continuous service."});return;}
     const bal=myBalances.find(b=>b.type===form.type);
     if(bal&&bal.balance!=="∞"&&bal.balance<days){setFormMsg({t:"error",m:`Insufficient ${form.type}. Available: ${bal.balance} days.`});return;}
@@ -1262,7 +1266,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             <span style={{fontSize:18,fontWeight:800,color:b.color}}>{b.balance} days left</span>
           </div>
         ))}
-        {form.type==="Maternity Leave"&&currentUser.gender!=="Female"&&<div style={s.alertBox("error")}>❌ Maternity leave for female officers only.</div>}
+
         {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏥 Medical certificate required within 3 working days of leave commencement.</div>}
         {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>💡 If you exceed your annual Vacation/Sick leave entitlement, the excess days are automatically treated as No Pay Leave by the Department — you do not need to apply for No Pay Leave separately. If you have accumulated Vacation/Sick leave from previous years, you may use that balance to cover the excess.</div>}
         {form.type==="Study Leave (Local)"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>📚 Max 10 days, once per degree, for PG exam preparation only (PAC 23/2014).</div>}
@@ -1538,9 +1542,85 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     // ── LEAVE REGISTER (Leave Officer) ───────────────────────────
     if(tab==="register") return(
       <div>
+        {/* Manual Leave Entry card */}
+        <div style={{fontSize:14,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>📋 Manual Leave Entry</div>
+        <div style={{...s.card,marginBottom:16,borderLeft:"3px solid #c4a227"}}>
+          <div style={{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:8}}>⚠️ For Maternity, Half Pay & No Pay Leave only — approved by Department</div>
+          <label style={s.label}>Staff Member</label>
+          <select style={{...s.select,marginBottom:8}} id="ml-emp">
+            <option value="">— Select staff —</option>
+            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
+          </select>
+          <label style={s.label}>Leave Type</label>
+          <select style={{...s.select,marginBottom:8}} id="ml-type">
+            <option value="Maternity Leave">Maternity Leave (84 days)</option>
+            <option value="Half Pay Leave">Half Pay Leave</option>
+            <option value="No Pay Leave">No Pay Leave</option>
+          </select>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>From</label><input type="date" style={s.input} id="ml-from" /></div>
+            <div><label style={s.label}>To</label><input type="date" style={s.input} id="ml-to" /></div>
+          </div>
+          <label style={s.label}>Department Reference / Reason</label>
+          <input style={{...s.input,marginBottom:10}} id="ml-reason" placeholder="e.g. Dept. approval ref: DTET/2026/..." />
+          <button style={{...s.btn("gold"),width:"100%",padding:"11px 0"}} onClick={()=>{
+            const empNo=document.getElementById("ml-emp")?.value;
+            const type=document.getElementById("ml-type")?.value;
+            const from=document.getElementById("ml-from")?.value;
+            const to=document.getElementById("ml-to")?.value;
+            const reason=document.getElementById("ml-reason")?.value;
+            if(!empNo||!from||!to||!reason){alert("Please fill all fields.");return;}
+            const days=countWD(from,to);
+            if(days<=0){alert("No working days in range.");return;}
+            const rec={id:Date.now(),type,from,to,days,reason,status:"Approved",appliedOn:today(),approvedOn:today(),approvedBy:currentUser?.fullName||"Leave Officer",medCertRequired:false,medCertReceived:false,manualEntry:true};
+            setLeaveRecords(prev=>{const n={...prev,[empNo]:[...(prev[empNo]||[]),rec]};return n;});
+            dbInsert("leave_records",{emp_no:empNo,...rec}).catch(e=>console.error(e));
+            alert("Manual leave entry recorded: "+type+" for "+days+" days.");
+            ["ml-emp","ml-from","ml-to","ml-reason"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+          }}>✅ Record Manual Leave</button>
+        </div>
+
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📓 Leave Register (Gen 190)</div>
         <label style={s.label}>Month</label>
         <input type="month" style={{...s.input,marginBottom:12}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
+        {/* ── Manual Leave Entry (Maternity / Half Pay / No Pay) ── */}
+        <div style={{fontSize:13,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>📋 Manual Leave Entry</div>
+        <div style={{background:"#fff",border:"2px solid #c4a227",borderRadius:14,padding:16,marginBottom:16}}>
+          <div style={{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:10}}>For <b>Maternity</b>, <b>Half Pay</b> & <b>No Pay Leave</b> — approved by the Department, not self-applied</div>
+          <label style={s.label}>Staff Member</label>
+          <select style={{...s.select,marginBottom:8}} id="ml-emp">
+            <option value="">— Select staff —</option>
+            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
+          </select>
+          <label style={s.label}>Leave Type</label>
+          <select style={{...s.select,marginBottom:8}} id="ml-type">
+            <option value="Maternity Leave">Maternity Leave (84 days)</option>
+            <option value="Half Pay Leave">Half Pay Leave</option>
+            <option value="No Pay Leave">No Pay Leave</option>
+          </select>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>From</label><input type="date" style={s.input} id="ml-from" /></div>
+            <div><label style={s.label}>To</label><input type="date" style={s.input} id="ml-to" /></div>
+          </div>
+          <label style={s.label}>Department Reference / Reason</label>
+          <input style={{...s.input,marginBottom:10}} id="ml-reason" placeholder="e.g. Dept. approval ref: DTET/2026/..." />
+          <button style={{background:"#c4a227",border:"none",borderRadius:10,padding:"12px 0",color:"#fff",fontWeight:700,fontSize:14,width:"100%",cursor:"pointer"}} onClick={()=>{
+            const empNo=document.getElementById("ml-emp")?.value;
+            const type=document.getElementById("ml-type")?.value;
+            const from=document.getElementById("ml-from")?.value;
+            const to=document.getElementById("ml-to")?.value;
+            const reason=document.getElementById("ml-reason")?.value;
+            if(!empNo||!from||!to||!reason){alert("Please fill all fields.");return;}
+            const days=countWD(from,to);
+            if(days<=0){alert("No working days in range.");return;}
+            const rec={id:Date.now(),type,from,to,days,reason,status:"Approved",appliedOn:today(),approvedOn:today(),approvedBy:currentUser?.fullName||"Leave Officer",medCertRequired:false,medCertReceived:false,manualEntry:true};
+            setLeaveRecords(prev=>({...prev,[empNo]:[...(prev[empNo]||[]),rec]}));
+            dbInsert("leave_records",{emp_no:empNo,...rec}).catch(e=>console.error(e));
+            alert("Recorded: "+type+" ("+days+" days). Staff can view in their Records tab.");
+            ["ml-from","ml-to","ml-reason"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+          }}>✅ Record Manual Leave Entry</button>
+        </div>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>📓 Monthly Leave Register — Gen 190</div>
         <button style={{...s.btn("purple"),width:"100%",padding:"12px 0",marginBottom:12}} onClick={()=>setModal({title:`Gen 190 — ${reportMonth}`,content:genMonthlyGen190(leaveRecords,reportMonth)})}>
           📓 Generate Monthly Gen 190 Report
         </button>
@@ -2040,13 +2120,22 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
                 </div>
               </div>
               {!isOnLeave&&<>
-                {/* Manual status buttons */}
-                <div style={{display:"flex",gap:5,marginBottom:6,flexWrap:"wrap"}}>
-                  {[{k:"present",l:"✓ P",c:"success"},{k:"minor_late",l:"⏱ ML",c:"warn"},{k:"late",l:"🔴 L",c:"warn"},{k:"absent",l:"✗ A",c:"danger"}].map(x=>(
-                    <button key={x.k} style={{...s.btn(st===x.k?x.c:""),padding:"5px 10px",fontSize:11,flex:1,opacity:st===x.k?1:0.6}} onClick={()=>setAttStatus(emp.empNo,attDate,{status:x.k,scanTime:scanTime||null,minorLate:x.k==="minor_late",coverUntil:x.k==="late"?COVER_END:null})}>
-                      {x.l}
-                    </button>
-                  ))}
+                {/* Scan-based: show result + edit/delete only */}
+                {scanTime
+                  ? <div style={{fontSize:11,color:C.accent,marginBottom:6}}>🖐 Finger scan: <b>{scanTime}</b> → auto-classified as <b>{st==="present"?"Present":st==="minor_late"?"Minor Late":st==="late"?"Late":st}</b></div>
+                  : <div style={{fontSize:11,color:C.muted,marginBottom:6}}>No finger scan — status set manually</div>
+                }
+                <div style={{display:"flex",gap:5,marginBottom:6}}>
+                  <button style={{...s.btn("outline"),padding:"5px 12px",fontSize:11,flex:1}} onClick={()=>{
+                    const s2=window.prompt("Edit status for "+emp.fullName+":\n1=Present  2=Minor Late  3=Late  4=Absent","1");
+                    const map={"1":"present","2":"minor_late","3":"late","4":"absent"};
+                    const newSt=map[s2?.trim()];
+                    if(newSt) setAttStatus(emp.empNo,attDate,{status:newSt,scanTime:scanTime||null,minorLate:newSt==="minor_late",coverUntil:newSt==="late"?COVER_END:null});
+                  }}>✏️ Edit</button>
+                  {attendance[attDate]?.[emp.empNo]&&<button style={{...s.btn("danger"),padding:"5px 12px",fontSize:11,flex:1}} onClick={()=>{
+                    if(window.confirm("Remove manual attendance for "+emp.fullName+"?"))
+                      setAttendance(prev=>{const n={...prev};if(n[attDate]){const d={...n[attDate]};delete d[emp.empNo];n[attDate]=d;}return n;});
+                  }}>🗑️ Delete</button>}
                 </div>
                 {/* Short leave buttons */}
                 {!isOnLeave&&shortUsed<SHORT_LEAVE_PER_MONTH&&<div style={{display:"flex",gap:5}}>
