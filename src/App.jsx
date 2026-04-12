@@ -964,9 +964,14 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   async function sendChat(){
     if(!chatInput.trim()||chatLoading)return;
     const msg=chatInput.trim();setChatInput("");setChatMsgs(p=>[...p,{role:"user",text:msg}]);setChatLoading(true);
+    const apiKey=import.meta.env.VITE_ANTHROPIC_KEY||"";
+    if(!apiKey){
+      setChatMsgs(p=>[...p,{role:"assistant",text:"⚠️ AI bot is not configured yet.\n\nTo enable it:\n1. Go to vercel.com → your project → Settings → Environment Variables\n2. Add: VITE_ANTHROPIC_KEY = your Anthropic API key\n3. Redeploy\n\nGet your API key from console.anthropic.com"}]);
+      setChatLoading(false);return;
+    }
     const balStr=myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":(import.meta.env.VITE_ANTHROPIC_KEY||""),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:"You are the official Leave Management AI for College of Technology Ratnapura (COT Ratnapura), DTET Sri Lanka. You know all leave rules including: Establishments Code Ch.XII, PACs to 08/2025, and DTET Circular DTET/04/PF/01/15 (2026.03.26). SINHALA TERMS: Casual=Aniyam Nivadu/\u0d85\u0db1\u0dd2\u0dba\u0db8\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4; Vacation=Viveka Nivadu; Sick=Asanipa Nivadu; Half Pay=Ada Watupu Nivadu (අඩ වැටුප් නිවාඩු); No Pay=Watupu Rahita Nivadu; Compensatory=Hilavu Nivadu (\u0dc4\u0dd2\u0dbd\u0dc0\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4); Short Leave=Keti Nivadu; Acting Officer=Wada Awarana Niladari (වැඩ ආවරණ නිලධාරී). KEY RULES: Casual 21/yr calendar basis (officer); Casual 0 first year then 21/yr after 1yr (junior); Vacation 24/yr; Sick prorated first 9mo then 24/yr (junior); Medical leave excludes weekends/holidays; Casual max 6 days at once; Short leave 2/month AM 8:30-10:00 PM officer 14:45/junior 15:00 to 16:15; Late before 09:00=minor(2 per month forgiven); Late after 09:00=must cover until 16:45; Compensatory leave earned by working on weekend/holiday, expires 1 year, half day possible; Acting officer required on Gen 125a; Academic staff: Director approves directly; Non Academic: Leave Officer recommends then Registrar recommends then Director approves. DTET/04/PF/01/15: Director must inform DG day before own leave; No Pay needs Head Office letter; Unauthorized absence needs written explanation in 3 working days; Vacation/sick/no-pay needs leave statement and medical cert. "+ (currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.",messages:[...chatMsgs.map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:msg}]})}); const data=await res.json(); setChatMsgs(p=>[...p,{role:"assistant",text:data.content?.[0]?.text||(data.error?.message?"API Error: "+data.error.message:"Connection error. Check API key in Vercel settings.")}]);
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":(import.meta.env.VITE_ANTHROPIC_KEY||"missing"),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:"You are the official Leave Management AI for College of Technology Ratnapura (COT Ratnapura), DTET Sri Lanka. You know all leave rules including: Establishments Code Ch.XII, PACs to 08/2025, and DTET Circular DTET/04/PF/01/15 (2026.03.26). SINHALA TERMS: Casual=Aniyam Nivadu/\u0d85\u0db1\u0dd2\u0dba\u0db8\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4; Vacation=Viveka Nivadu; Sick=Asanipa Nivadu; Half Pay=Ada Watupu Nivadu (අඩ වැටුප් නිවාඩු); No Pay=Watupu Rahita Nivadu; Compensatory=Hilavu Nivadu (\u0dc4\u0dd2\u0dbd\u0dc0\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4); Short Leave=Keti Nivadu; Acting Officer=Wada Awarana Niladari (වැඩ ආවරණ නිලධාරී). KEY RULES: Casual 21/yr calendar basis (officer); Casual 0 first year then 21/yr after 1yr (junior); Vacation 24/yr; Sick prorated first 9mo then 24/yr (junior); Medical leave excludes weekends/holidays; Casual max 6 days at once; Short leave 2/month AM 8:30-10:00 PM officer 14:45/junior 15:00 to 16:15; Late before 09:00=minor(2 per month forgiven); Late after 09:00=must cover until 16:45; Compensatory leave earned by working on weekend/holiday, expires 1 year, half day possible; Acting officer required on Gen 125a; Academic staff: Director approves directly; Non Academic: Leave Officer recommends then Registrar recommends then Director approves. DTET/04/PF/01/15: Director must inform DG day before own leave; No Pay needs Head Office letter; Unauthorized absence needs written explanation in 3 working days; Vacation/sick/no-pay needs leave statement and medical cert. "+ (currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.",messages:[...chatMsgs.map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:msg}]})}); const data=await res.json(); setChatMsgs(p=>[...p,{role:"assistant",text:data.content?.[0]?.text||(data.error?.message?"API Error: "+data.error.message:"Connection error. Check API key in Vercel settings.")}]);
     }catch{setChatMsgs(p=>[...p,{role:"assistant",text:"Connection error."}]);}
     setChatLoading(false);
   }
@@ -1211,32 +1216,6 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           </>}
         </>}
 
-
-        {/* Leave balance + quick apply for officers (non-staff roles) */}
-        {userRole!=="staff"&&<>
-          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("My Leave Balance","මගේ නිවාඩු ශේෂය")} {currYear}</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:12}}>
-            {getLeaveBalance(currentUser,leaveRecords,currYear).filter(b=>b.total>0).slice(0,4).map(b=>(
-              <div key={b.type} style={{...s.card,borderColor:b.color+"33",background:b.color+"0a",padding:"12px 12px"}}>
-                <div style={{fontSize:26,fontWeight:800,color:b.color,lineHeight:1}}>{b.balance}</div>
-                <div style={{fontSize:9,color:"#94a3b8",marginTop:3}}>{b.icon} {b.type}</div>
-                <div style={{fontSize:9,color:"#334155"}}>{b.used} {t("used","භාවිත")} / {b.total} {t("total","මුළු")}</div>
-              </div>
-            ))}
-          </div>
-          <button style={{...s.btn("primary"),width:"100%",padding:"12px 0",marginBottom:14,fontSize:14}} onClick={()=>setTab("myapply")}>
-            📝 {t("Apply for Leave","නිවාඩු ඉල්ලීම")}
-          </button>
-          {(leaveRecords[currentUser.empNo]||[]).length>0&&<>
-            <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("My Recent Leaves","මගේ මෑත නිවාඩු")}</div>
-            {[...(leaveRecords[currentUser.empNo]||[])].reverse().slice(0,3).map(r=>(
-              <div key={r.id} style={{...s.card,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",marginBottom:6}}>
-                <div><div style={{fontSize:13,fontWeight:600}}>{r.type}</div><div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · {r.days}d</div></div>
-                <span style={s.badge(r.status)}>{r.status}</span>
-              </div>
-            ))}
-          </>}
-        </>}
         {/* Recent applications for staff */}
         {userRole==="staff"&&myLeaves.length>0&&<>
           <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>{t("Recent Applications","මෑත ඉල්ලීම්")}</div>
