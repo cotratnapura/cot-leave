@@ -963,16 +963,40 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ── Chat ──────────────────────────────────────────────────────
   async function sendChat(){
     if(!chatInput.trim()||chatLoading)return;
-    const msg=chatInput.trim();setChatInput("");setChatMsgs(p=>[...p,{role:"user",text:msg}]);setChatLoading(true);
-    const apiKey=import.meta.env.VITE_ANTHROPIC_KEY||"";
+    const msg=chatInput.trim();
+    setChatInput("");
+    setChatMsgs(p=>[...p,{role:"user",text:msg}]);
+    setChatLoading(true);
+    const apiKey=import.meta.env.VITE_GEMINI_KEY||"";
     if(!apiKey){
-      setChatMsgs(p=>[...p,{role:"assistant",text:"⚠️ AI bot is not configured yet.\n\nTo enable it:\n1. Go to vercel.com → your project → Settings → Environment Variables\n2. Add: VITE_ANTHROPIC_KEY = your Anthropic API key\n3. Redeploy\n\nGet your API key from console.anthropic.com"}]);
+      setChatMsgs(p=>[...p,{role:"assistant",text:"⚠️ AI bot not configured yet.\n\nTo enable (FREE):\n1. Go to aistudio.google.com → Get API Key\n2. Go to vercel.com → your project → Settings → Environment Variables\n3. Add: VITE_GEMINI_KEY = your Google AI Studio key\n4. Redeploy the app"}]);
       setChatLoading(false);return;
     }
     const balStr=myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
+    const systemText=`You are the official Leave Management AI for College of Technology Ratnapura (COT Ratnapura), DTET Sri Lanka. You know all leave rules including: Establishments Code Ch.XII, PACs to 08/2025, and DTET Circular DTET/04/PF/01/15 (2026.03.26). SINHALA TERMS: Casual=Aniyam Nivadu/\u0d85\u0db1\u0dd2\u0dba\u0db8\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4; Vacation=Viveka Nivadu; Sick=Asanipa Nivadu; Half Pay=Ada Watupu Nivadu (අඩ වැටුප් නිවාඩු); No Pay=Watupu Rahita Nivadu; Compensatory=Hilavu Nivadu (\u0dc4\u0dd2\u0dbd\u0dc0\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4); Short Leave=Keti Nivadu; Acting Officer=Wada Awarana Niladari (වැඩ ආවරණ නිලධාරී). KEY RULES: Casual 21/yr calendar basis (officer); Casual 0 first year then 21/yr after 1yr (junior); Vacation 24/yr; Sick prorated first 9mo then 24/yr (junior); Medical leave excludes weekends/holidays; Casual max 6 days at once; Short leave 2/month AM 8:30-10:00 PM officer 14:45/junior 15:00 to 16:15; Late before 09:00=minor(2 per month forgiven); Late after 09:00=must cover until 16:45; Compensatory leave earned by working on weekend/holiday, expires 1 year, half day possible; Acting officer required on Gen 125a; Academic staff: Director approves directly; Non Academic: Leave Officer recommends then Registrar recommends then Director approves. DTET/04/PF/01/15: Director must inform DG day before own leave; No Pay needs Head Office letter; Unauthorized absence needs written explanation in 3 working days; Vacation/sick/no-pay needs leave statement and medical cert. "+ (currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.`+(currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.";
+    // Build conversation history for Gemini
+    const history=chatMsgs.map(m=>({role:m.role==="user"?"user":"model",parts:[{text:m.text}]}));
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":(import.meta.env.VITE_ANTHROPIC_KEY||"missing"),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:"You are the official Leave Management AI for College of Technology Ratnapura (COT Ratnapura), DTET Sri Lanka. You know all leave rules including: Establishments Code Ch.XII, PACs to 08/2025, and DTET Circular DTET/04/PF/01/15 (2026.03.26). SINHALA TERMS: Casual=Aniyam Nivadu/\u0d85\u0db1\u0dd2\u0dba\u0db8\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4; Vacation=Viveka Nivadu; Sick=Asanipa Nivadu; Half Pay=Ada Watupu Nivadu (අඩ වැටුප් නිවාඩු); No Pay=Watupu Rahita Nivadu; Compensatory=Hilavu Nivadu (\u0dc4\u0dd2\u0dbd\u0dc0\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4); Short Leave=Keti Nivadu; Acting Officer=Wada Awarana Niladari (වැඩ ආවරණ නිලධාරී). KEY RULES: Casual 21/yr calendar basis (officer); Casual 0 first year then 21/yr after 1yr (junior); Vacation 24/yr; Sick prorated first 9mo then 24/yr (junior); Medical leave excludes weekends/holidays; Casual max 6 days at once; Short leave 2/month AM 8:30-10:00 PM officer 14:45/junior 15:00 to 16:15; Late before 09:00=minor(2 per month forgiven); Late after 09:00=must cover until 16:45; Compensatory leave earned by working on weekend/holiday, expires 1 year, half day possible; Acting officer required on Gen 125a; Academic staff: Director approves directly; Non Academic: Leave Officer recommends then Registrar recommends then Director approves. DTET/04/PF/01/15: Director must inform DG day before own leave; No Pay needs Head Office letter; Unauthorized absence needs written explanation in 3 working days; Vacation/sick/no-pay needs leave statement and medical cert. "+ (currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.",messages:[...chatMsgs.map(m=>({role:m.role==="user"?"user":"assistant",content:m.text})),{role:"user",content:msg}]})}); const data=await res.json(); setChatMsgs(p=>[...p,{role:"assistant",text:data.content?.[0]?.text||(data.error?.message?"API Error: "+data.error.message:"Connection error. Check API key in Vercel settings.")}]);
-    }catch{setChatMsgs(p=>[...p,{role:"assistant",text:"Connection error."}]);}
+      const res=await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {method:"POST",headers:{"Content-Type":"application/json"},
+         body:JSON.stringify({
+           system_instruction:{parts:[{text:systemText}]},
+           contents:[...history,{role:"user",parts:[{text:msg}]}],
+           generationConfig:{maxOutputTokens:800,temperature:0.3}
+         })}
+      );
+      const data=await res.json();
+      if(!res.ok){
+        const errMsg=data?.error?.message||"API Error";
+        setChatMsgs(p=>[...p,{role:"assistant",text:"❌ "+errMsg}]);
+      } else {
+        const reply=data?.candidates?.[0]?.content?.parts?.[0]?.text||"No response.";
+        setChatMsgs(p=>[...p,{role:"assistant",text:reply}]);
+      }
+    }catch(e){
+      setChatMsgs(p=>[...p,{role:"assistant",text:"Connection error. Please try again."}]);
+    }
     setChatLoading(false);
   }
 
