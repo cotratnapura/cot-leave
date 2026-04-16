@@ -140,18 +140,20 @@ function getEntitlement(emp, year) {
     casual = svcYearsAtYearStart >= -1 ? 21 : 0; // available from joined year
     // Vacation: first 2 years on appointment basis (24/yr), then calendar year basis
     // Officers entitled to 24 vacation/sick days per year (Ch.XII Estab. Code)
-    // Prorated only in the year of first appointment
+    // Full 24 after first year; prorated in joining year; 0 if not yet joined
     if (svcYearsAtYearStart >= 1) {
-      vacation = 24; // full entitlement after 1st year
-    } else if (svcYearsAtYearStart >= 0) {
-      // First year: prorate from joining date
-      const monthsInYear = Math.min(12, Math.max(0, (yearEnd - joined) / (30.44*864e5)));
-      vacation = Math.round((24/12)*monthsInYear);
+      vacation = 24; // full entitlement from 2nd year onwards
     } else {
-      vacation = 0; // not yet joined
+      // Joining year OR joined mid-year: prorate from joining date to year-end
+      const monthsRemaining = (yearEnd - Math.max(yearStart, joined)) / (30.44*864e5);
+      if (monthsRemaining > 0) {
+        vacation = Math.round((24/12) * Math.min(12, monthsRemaining));
+      } else {
+        vacation = 0; // not yet joined this year
+      }
     }
   }
-  return { casual, vacation, halfPay:0, noPay:0, maternity: emp.gender==="Female"?84:0, special:5, study:10 };
+  return { casual, vacation, halfPay:0, noPay:0, maternity: emp.gender==="Female"?84:0, special:5, study:10, duty:0 };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -181,6 +183,7 @@ function getLeaveBalance(emp, leaveRecords, year=currYear) {
     "Maternity Leave":     {total:ent.maternity,   color:"#ec4899",icon:"👶"},
     "Special Leave":       {total:ent.special,     color:"#0ea5e9",icon:"⭐"},
     "Study Leave (Local)": {total:ent.study,       color:"#8b5cf6",icon:"📚"},
+    "Duty Leave":          {total:0,               color:"#0891b2",icon:"🏛️"},
   };
   return Object.entries(types).map(([type,info])=>{
     const used=getUsedLeave(emp.empNo,leaveRecords,type,year);
@@ -297,7 +300,7 @@ function generateScanData(empNo, date) {
 // ═══════════════════════════════════════════════════════════════
 function genForm125a(rec, emp) {
   const ent=getEntitlement(emp,new Date().getFullYear());
-  const isCas=rec.type==="Casual Leave"||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
+  const isCas=rec.type==="Casual Leave";
   const isVac=rec.type==="Vacation/Sick Leave"||rec.type==="Maternity Leave";
   return `╔══════════════════════════════════════════════════════════════════════════╗
 ║  නිවාඩු ඉල්ලුම් පතුය / APPLICATION FOR LEAVE — General 125 අ/a         ║
@@ -327,7 +330,7 @@ function genForm125a(rec, emp) {
 }
 
 function genForm190Entry(rec, emp) {
-  const isCas=rec.type==="Casual Leave"||rec.type==="Special Leave"||rec.type==="Study Leave (Local)";
+  const isCas=rec.type==="Casual Leave";
   const isVac=rec.type==="Vacation/Sick Leave"||rec.type==="Maternity Leave";
   const isHP=rec.type==="Half Pay Leave"; const isNP=rec.type==="No Pay Leave";
   return `║${rec.from.slice(5).padEnd(7)}║${rec.to.slice(5).padEnd(7)}║${isCas?String(rec.days).padEnd(7):"       "}║${isVac?String(rec.days).padEnd(7):"       "}║${"       "}║${"           "}║${isHP?(" - "+rec.days).padEnd(10):"          "}║${isNP?(" - "+rec.days).padEnd(10):"          "}║ ${rec.reason.substring(0,30).padEnd(30)} ║`;
@@ -346,7 +349,7 @@ function genMonthlyGen190(leaveRecords, month) {
   STAFF.forEach(emp=>{
     const recs=(leaveRecords[emp.empNo]||[]).filter(r=>r.status==="Approved"&&r.from.startsWith(month));
     recs.forEach(r=>{
-      const isCas=r.type==="Casual Leave"||r.type==="Special Leave"; const isVac=r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave"; const isHP=r.type==="Half Pay Leave"; const isNP=r.type==="No Pay Leave";
+      const isCas=r.type==="Casual Leave"; const isVac=r.type==="Vacation/Sick Leave"||r.type==="Maternity Leave"; const isHP=r.type==="Half Pay Leave"; const isNP=r.type==="No Pay Leave";
       if(isCas) total.cas+=r.days; if(isVac) total.vac+=r.days; if(isHP) total.hp+=r.days; if(isNP) total.np+=r.days;
       lines+=`║${emp.empNo.padEnd(7)}║${emp.fullName.substring(0,31).padEnd(31)}║${r.from.slice(5).padEnd(7)}║${r.to.slice(5).padEnd(7)}║${isCas?String(r.days).padEnd(7):"       "}║${isVac?String(r.days).padEnd(7):"       "}║${"           "}║${isHP?(" - "+r.days).padEnd(10):"          "}║${isNP?(" - "+r.days).padEnd(10):"          "}║ ${r.reason.substring(0,30).padEnd(30)} ║\n`;
     });
@@ -535,6 +538,7 @@ export default function App() {
   const chatEnd = useRef(null);
   const [chatMsgs, setChatMsgs] = useState([]); const [chatInput, setChatInput] = useState(""); const [chatLoading, setChatLoading] = useState(false); const [showChat, setShowChat] = useState(false);
   const [myLeaveSubTab,setMyLeaveSubTab]=useState("apply");
+  const [xlsxLog,setXlsxLog]=useState([]);
   useEffect(()=>{ chatEnd.current?.scrollIntoView({behavior:"smooth"}); },[chatMsgs]);
 
   // ── Load all data from Supabase on startup ────────────────────
@@ -961,43 +965,248 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   }
 
   // ── Chat ──────────────────────────────────────────────────────
+  // ── Excel attendance import ─────────────────────────────
+  function processXlsxRows(rows, filename) {
+    const log=["📂 Processing: "+filename,"   "+rows.length+" rows found"];
+    const newScanData={...scanData};
+    let processed=0, errors=0;
+
+    // Detect column names flexibly
+    const sample=rows[0]||{};
+    const keys=Object.keys(sample);
+    const findCol=(candidates)=>candidates.find(c=>keys.some(k=>k.toLowerCase().includes(c.toLowerCase())));
+    const empCol  = findCol(["Employee ID","Emp ID","ID","EmpNo","Emp_ID","employee","id"])||keys[0];
+    const dateCol = findCol(["Date","date","att_date"])||keys[1];
+    const timeCol = findCol(["Time","time","scan_time","att_time"])||keys[2];
+    const dtCol   = findCol(["DateTime","datetime","date_time"]);
+    log.push("   Columns: "+empCol+" | "+(dtCol||dateCol+" + "+timeCol));
+
+    const seen={}; // emp+date → [times]
+    rows.forEach((row,i)=>{
+      try{
+        const empId=String(row[empCol]||"").trim();
+        if(!empId){return;}
+        let dateStr="", timeStr="";
+        if(dtCol&&row[dtCol]){
+          // Combined DateTime column
+          const dt=new Date(row[dtCol]);
+          if(!isNaN(dt)){
+            dateStr=dt.toISOString().slice(0,10);
+            timeStr=dt.toTimeString().slice(0,8);
+          }
+        } else {
+          // Separate Date and Time columns
+          const rawDate=String(row[dateCol]||"").trim();
+          const rawTime=String(row[timeCol]||"").trim();
+          // Parse date
+          const dParts=rawDate.match(/(\d{4})-(\d{2})-(\d{2})/)||rawDate.match(/(\d{2})[\/-](\d{2})[\/-](\d{4})/);
+          if(dParts){
+            dateStr=dParts[1].length===4?dParts[0]:dParts[3]+"-"+dParts[2]+"-"+dParts[1];
+          } else {
+            const dt2=new Date(rawDate);
+            if(!isNaN(dt2)) dateStr=dt2.toISOString().slice(0,10);
+          }
+          // Parse time — handle "08:28", "08:28:00", "8:28 AM"
+          const tMatch=rawTime.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(AM|PM))?/i);
+          if(tMatch){
+            let h=parseInt(tMatch[1]),m=parseInt(tMatch[2]);
+            if(tMatch[4]?.toUpperCase()==="PM"&&h!==12)h+=12;
+            if(tMatch[4]?.toUpperCase()==="AM"&&h===12)h=0;
+            timeStr=String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+(tMatch[3]||"00");
+          }
+        }
+        if(!dateStr||!timeStr||!empId){return;}
+        const key=empId+"||"+dateStr;
+        if(!seen[key])seen[key]=[];
+        seen[key].push(timeStr);
+        processed++;
+      }catch(e){errors++;}
+    });
+
+    // For each emp+date: first scan=check-in, last scan=check-out
+    const attendanceUpdates={};
+    Object.entries(seen).forEach(([key,times])=>{
+      const [empId,dateStr]=key.split("||");
+      const sorted=[...times].sort();
+      const firstScan=sorted[0];
+      const lastScan=sorted[sorted.length-1];
+      if(!newScanData[dateStr])newScanData[dateStr]={};
+      newScanData[dateStr][empId]=firstScan;
+      // Classify check-in time
+      const cl=classifyScanIn(firstScan,ALL_STAFF.find(e=>e.empNo===empId)||{staffGrade:"officer"});
+      if(!attendanceUpdates[dateStr])attendanceUpdates[dateStr]={};
+      attendanceUpdates[dateStr][empId]={
+        status:cl.late?"late":cl.minorLate?"minor_late":"present",
+        scanTime:firstScan,
+        checkOut:lastScan!==firstScan?lastScan:null,
+        minorLate:cl.minorLate,
+        coverUntil:cl.coverUntil,
+        fromScan:true   // flag: auto-imported from scanner
+      };
+    });
+    // Batch update attendance
+    if(Object.keys(attendanceUpdates).length>0){
+      setAttendance(prev=>{
+        const nd={...prev};
+        Object.entries(attendanceUpdates).forEach(([dateStr,emps])=>{
+          if(!nd[dateStr])nd[dateStr]={};
+          Object.entries(emps).forEach(([empId,val])=>{
+            nd[dateStr][empId]=val;
+          });
+        });
+        return nd;
+      });
+    }
+
+    setScanData(newScanData);
+    const dates=[...new Set(Object.keys(seen).map(k=>k.split("||")[1]))].sort();
+    log.push("✓ "+processed+" scans processed across "+dates.length+" date(s)");
+    if(errors>0)log.push("⚠ "+errors+" rows skipped (missing data)");
+    dates.forEach(d=>{
+      const empCount=Object.keys(seen).filter(k=>k.endsWith("||"+d)).length;
+      log.push("  📅 "+d+": "+empCount+" employees");
+    });
+    if(dates.length>0)setAttDate(dates[dates.length-1]);
+    log.push("✓ Done — switch to Attendance tab to review");
+    setXlsxLog(log);
+  }
+
   async function sendChat(){
     if(!chatInput.trim()||chatLoading)return;
     const msg=chatInput.trim();
     setChatInput("");
     setChatMsgs(p=>[...p,{role:"user",text:msg}]);
     setChatLoading(true);
-    const apiKey=import.meta.env.VITE_GEMINI_KEY||"";
-    if(!apiKey){
-      setChatMsgs(p=>[...p,{role:"assistant",text:"⚠️ AI bot not configured yet.\n\nTo enable (FREE):\n1. Go to aistudio.google.com → Get API Key\n2. Go to vercel.com → your project → Settings → Environment Variables\n3. Add: VITE_GEMINI_KEY = your Google AI Studio key\n4. Redeploy the app"}]);
+
+    const hfKey=import.meta.env.VITE_HF_KEY||"";
+    if(!hfKey){
+      setChatMsgs(p=>[...p,{role:"assistant",text:
+        "⚠️ AI bot not configured yet.\n\n"+
+        "To enable FREE AI (Mistral / LLaMA):\n"+
+        "1. Go to huggingface.co → Sign up (free)\n"+
+        "2. Profile → Settings → Access Tokens\n"+
+        "3. Create token (Read permission)\n"+
+        "4. Vercel → project → Settings → Environment Variables\n"+
+        "5. Add: VITE_HF_KEY = hf_...\n"+
+        "6. Redeploy\n\n"+
+        "100% free — no credit card needed."
+      }]);
       setChatLoading(false);return;
     }
+
+    // System prompt with full leave rules
     const balStr=myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
-    const systemText=`You are the official Leave Management AI for College of Technology Ratnapura (COT Ratnapura), DTET Sri Lanka. You know all leave rules including: Establishments Code Ch.XII, PACs to 08/2025, and DTET Circular DTET/04/PF/01/15 (2026.03.26). SINHALA TERMS: Casual=Aniyam Nivadu/\u0d85\u0db1\u0dd2\u0dba\u0db8\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4; Vacation=Viveka Nivadu; Sick=Asanipa Nivadu; Half Pay=Ada Watupu Nivadu (අඩ වැටුප් නිවාඩු); No Pay=Watupu Rahita Nivadu; Compensatory=Hilavu Nivadu (\u0dc4\u0dd2\u0dbd\u0dc0\u0dca \u0db1\u0dd2\u0dc0\u0dcf\u0da9\u0dd4); Short Leave=Keti Nivadu; Acting Officer=Wada Awarana Niladari (වැඩ ආවරණ නිලධාරී). KEY RULES: Casual 21/yr calendar basis (officer); Casual 0 first year then 21/yr after 1yr (junior); Vacation 24/yr; Sick prorated first 9mo then 24/yr (junior); Medical leave excludes weekends/holidays; Casual max 6 days at once; Short leave 2/month AM 8:30-10:00 PM officer 14:45/junior 15:00 to 16:15; Late before 09:00=minor(2 per month forgiven); Late after 09:00=must cover until 16:45; Compensatory leave earned by working on weekend/holiday, expires 1 year, half day possible; Acting officer required on Gen 125a; Academic staff: Director approves directly; Non Academic: Leave Officer recommends then Registrar recommends then Director approves. DTET/04/PF/01/15: Director must inform DG day before own leave; No Pay needs Head Office letter; Unauthorized absence needs written explanation in 3 working days; Vacation/sick/no-pay needs leave statement and medical cert. "+ (currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.`+(currentUser?"User: "+currentUser.fullName+" ("+userRole+") "+currentUser.designation+" grade:"+currentUser.staffGrade+" joined:"+currentUser.joined+".":"")+" "+(myBalances.length?"Balances: "+balStr+".":"")+" Answer in the same language the user writes in (English or Sinhala). Be accurate and helpful.";
-    // Build conversation history for Gemini
-    const history=chatMsgs.map(m=>({role:m.role==="user"?"user":"model",parts:[{text:m.text}]}));
-    try{
-      const res=await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {method:"POST",headers:{"Content-Type":"application/json"},
-         body:JSON.stringify({
-           system_instruction:{parts:[{text:systemText}]},
-           contents:[...history,{role:"user",parts:[{text:msg}]}],
-           generationConfig:{maxOutputTokens:800,temperature:0.3}
-         })}
-      );
-      const data=await res.json();
-      if(!res.ok){
-        const errMsg=data?.error?.message||"API Error";
-        setChatMsgs(p=>[...p,{role:"assistant",text:"❌ "+errMsg}]);
-      } else {
-        const reply=data?.candidates?.[0]?.content?.parts?.[0]?.text||"No response.";
-        setChatMsgs(p=>[...p,{role:"assistant",text:reply}]);
-      }
-    }catch(e){
-      setChatMsgs(p=>[...p,{role:"assistant",text:"Connection error. Please try again."}]);
+    const sysPrompt=
+      "You are the official Leave Management Assistant for College of Technology Ratnapura (COT Ratnapura), "+
+      "under DTET Sri Lanka. Answer questions about leave rules accurately and concisely. "+
+      "KEY RULES: "+
+      "Casual Leave: 21 days/year for officers; 0 in first year then 21/yr for junior staff; max 6 days at once. "+
+      "Vacation/Sick Leave: 24 days/year for ALL officers including Director, Registrar, Leave Officer, ICT Officer; "+
+      "junior staff prorated first 9 months then 24/yr. Medical certificate required within 3 working days. "+
+      "Compensatory Leave: earned by working on weekends/public holidays; valid 1 year; half-day possible. "+
+      "Duty Leave: for official duties outside institute (workshops, meetings, inspections); Director must approve before date. "+
+      "No Pay Leave: Department applies automatically when Vacation/Sick leave is exceeded. "+
+      "Half Pay Leave & Maternity Leave (84 days): recorded by Leave Officer — not self-applied. "+
+      "Short Leave: 2 per month; AM 8:30-10:00; PM officer 14:45-16:15 / junior 15:00-16:15. "+
+      "Late arrival: up to 09:00 = minor late (2 forgiven per month); after 09:00 = must stay until 16:45. "+
+      "Approval workflow — Academic staff: Director approves directly. "+
+      "Non-Academic staff: Leave Officer recommends → Registrar recommends → Director approves. "+
+      "Director own leave: must inform Director General (DG) the day before (DTET/04/PF/01/15). "+
+      "Gen 125a: official leave form; acting officer must be named. "+
+      "Gen 190: monthly leave register. "+
+      "DTET Circular DTET/04/PF/01/15 dated 2026.03.26 governs all leave procedures. "+
+      "Sinhala terms: Casual=අනියම් නිවාඩු, Vacation=විවේක නිවාඩු, Sick=අසනීප නිවාඩු, "+
+      "Compensatory=හිලව් නිවාඩු, Duty=රාජකාරී නිවාඩු, No Pay=වැටුප් රහිත නිවාඩු. "+
+      (currentUser
+        ? "Current user: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+
+          ", grade: "+currentUser.staffGrade+", joined: "+currentUser.joined+". "
+        : "")+
+      (myBalances.length ? "Leave balances: "+balStr+". " : "")+
+      "Always respond in the same language the user writes in (English or Sinhala). Be brief and accurate.";
+
+    // Build prompt in Mistral instruct format
+    // [INST] system + history + user [/INST]
+    const historyText=chatMsgs.slice(-6).map(m=>
+      m.role==="user"?"[INST] "+m.text+" [/INST]":""+m.text+""
+    ).join("\n");
+
+    const fullPrompt=
+      "<s>[INST] <<SYS>>\n"+sysPrompt+"\n<</SYS>>\n\n"+
+      (historyText?historyText+"\n":"")+
+      msg+" [/INST]";
+
+    // Try Mistral-7B-Instruct first (best quality, free)
+    // Fallback: Llama-2-7b-chat-hf
+    const models=[
+      "mistralai/Mistral-7B-Instruct-v0.3",
+      "meta-llama/Llama-2-7b-chat-hf",
+      "HuggingFaceH4/zephyr-7b-beta",
+    ];
+
+    let replied=false;
+    for(const model of models){
+      try{
+        const res=await fetch(
+          "https://api-inference.huggingface.co/models/"+model,
+          {
+            method:"POST",
+            headers:{
+              "Authorization":"Bearer "+hfKey,
+              "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+              inputs:fullPrompt,
+              parameters:{
+                max_new_tokens:400,
+                temperature:0.3,
+                top_p:0.9,
+                repetition_penalty:1.1,
+                return_full_text:false
+              }
+            })
+          }
+        );
+        if(res.status===503){
+          // Model loading — wait and retry once
+          await new Promise(r=>setTimeout(r,8000));
+          const res2=await fetch(
+            "https://api-inference.huggingface.co/models/"+model,
+            {method:"POST",headers:{"Authorization":"Bearer "+hfKey,"Content-Type":"application/json"},
+             body:JSON.stringify({inputs:fullPrompt,parameters:{max_new_tokens:400,temperature:0.3,top_p:0.9,repetition_penalty:1.1,return_full_text:false}})}
+          );
+          if(!res2.ok) continue;
+          const d2=await res2.json();
+          const txt2=(Array.isArray(d2)?d2[0]?.generated_text:d2?.generated_text)||"";
+          if(txt2.trim()){
+            setChatMsgs(p=>[...p,{role:"assistant",text:cleanReply(txt2)}]);
+            replied=true;break;
+          }
+          continue;
+        }
+        if(!res.ok) continue;
+        const data=await res.json();
+        const text=(Array.isArray(data)?data[0]?.generated_text:data?.generated_text)||"";
+        if(text.trim()){
+          setChatMsgs(p=>[...p,{role:"assistant",text:cleanReply(text)}]);
+          replied=true;break;
+        }
+      }catch(e){ continue; }
+    }
+    if(!replied){
+      setChatMsgs(p=>[...p,{role:"assistant",text:
+        "❌ Could not get a response. The model may be loading (first request takes ~20 seconds). Please try again."}]);
     }
     setChatLoading(false);
+  }
+
+  function cleanReply(text){
+    // Strip any prompt echoing or instruction tags that leaked through
+    return text
+      .replace(/<\/?s>/g,"")
+      .replace(/\[INST\][\s\S]*?\[\/INST\]/g,"")
+      .replace(/<<SYS>>[\s\S]*?<\/SYS>>/g,"")
+      .replace(/^\s*assistant:?\s*/i,"")
+      .trim();
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -1261,7 +1470,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         {svcBanner}
         <label style={s.label}>{t("Leave Type","නිවාඩු වර්ගය")}</label>
         <select style={{...s.select,marginBottom:12}} value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
-          {[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Compensatory Leave","හිලව් නිවාඩු"),"Maternity Leave","Special Leave","Study Leave (Local)"].map(t=><option key={t}>{t}</option>)}
+          {[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Compensatory Leave","හිලව් නිවාඩු"),"Duty Leave"].map(t=><option key={t}>{t}</option>)}
         </select>
         {myBalances.filter(b=>b.type===form.type).map(b=>(
           b.total>0&&<div key={b.type} style={{background:b.color+"0f",border:`1px solid ${b.color}33`,borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1271,8 +1480,8 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         ))}
 
         {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏥 Medical certificate required within 3 working days of leave commencement.</div>}
+        {form.type==="Duty Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏛️ Duty Leave: For official duties outside the institute (workshops, meetings, inspections). Must be approved by Director before the date. Attach the official duty letter/notification.</div>}
         {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>💡 If you exceed your annual Vacation/Sick leave entitlement, the excess days are automatically treated as No Pay Leave by the Department — you do not need to apply for No Pay Leave separately. If you have accumulated Vacation/Sick leave from previous years, you may use that balance to cover the excess.</div>}
-        {form.type==="Study Leave (Local)"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>📚 Max 10 days, once per degree, for PG exam preparation only (PAC 23/2014).</div>}
         <label style={s.label}>From Date</label>
         <input type="date" style={{...s.input,marginBottom:12}} value={form.from} onChange={e=>setForm(f=>({...f,from:e.target.value}))} />
         <label style={s.label}>To Date</label>
@@ -1332,7 +1541,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             <label style={s.label}>{t("Leave Type","නිවාඩු වර්ගය")}</label>
             <select style={{...s.select,marginBottom:12}} value={form.type} onChange={e=>setForm(f=>({...f,type:e.target.value}))}>
               <option value="">{t("— Select leave type —","— නිවාඩු වර්ගය —")}</option>
-              {[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Compensatory Leave","හිලව් නිවාඩු"),"Special Leave","Study Leave (Local)"].map(lt=>(
+              {[t("Casual Leave","අනියම් නිවාඩු"),"Vacation/Sick Leave",t("Compensatory Leave","හිලව් නිවාඩු"),"Duty Leave"].map(lt=>(
                 <option key={lt} value={lt}>{lt}</option>
               ))}
             </select>
@@ -1343,6 +1552,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
               </div>
             ))}
             {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏥 {t("Medical certificate required within 3 working days.","වෛද්‍ය සහතිකය වැඩ කරන දින 3ක් ඇතුළත.")}</div>}
+            {form.type==="Duty Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏛️ {t("Duty Leave: For official duties outside institute. Attach official duty notification. Director must approve before date.","රාජකාරී නිවාඩු: ආයතනයෙන් පිටත නිල රාජකාරී සඳහා. නිල ලිපිය අමුණන්න. Director කලින් අනුමත කළ යුතුය.")}</div>}
             {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>💡 {t("If Vacation/Sick leave is exceeded, the Department applies No Pay automatically. If you have accumulated leave from previous years, it can cover the excess.","විවේක/අසනීප නිවාඩු ඉක්මවුවහොත් දෙපාර්තමේන්තුව ස්වයංක්‍රීයව No Pay ලෙස සලකයි. කලින් සිට රැස් කළ නිවාඩු ඇත්නම් එය භාවිත කළ හැක.")}</div>}
             {userRole==="director"&&form.type&&<div style={{...s.alertBox("warn"),marginBottom:10}}>⚠️ {t("You must inform the Director General the day before your leave.","ඔබ නිවාඩු ගැනීමට පෙර දිනයේ Director General ට දැනුම් දිය යුතුය.")}</div>}
             <label style={s.label}>{t("From Date","ආරම්භ දිනය")}</label>
@@ -1485,11 +1695,16 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     // ── AI CHAT ──────────────────────────────────────────────────
     if(tab==="chat") return(
       <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 160px)"}}>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>{t("🤖 AI Leave Assistant","🤖 AI නිවාඩු සහාය")}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div style={{fontSize:16,fontWeight:700}}>{t("🤖 AI Leave Assistant","🤖 AI නිවාඩු සහාය")}</div>
+          <div style={{fontSize:10,background:"#f0fdf4",color:"#166534",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontWeight:600}}>
+            🆓 Mistral-7B · Free
+          </div>
+        </div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:10}}>
-          {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#1e3a52"}}>Responds in English or Sinhala.</span></div>}
+          {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#15803d",fontWeight:600}}>Powered by Mistral-7B (free open-source AI)</span><br/><span style={{color:"#1e3a52",fontSize:11}}>Responds in English or Sinhala</span></div>}
           {chatMsgs.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}><div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"#1565c0":"#f0f4f8",fontSize:13,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.text}</div></div>)}
-          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center"}}>Thinking…</div>}
+          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center",padding:"8px 0"}}>🤔 Mistral is thinking… (first message may take ~20 sec)</div>}
           <div ref={chatEnd}/>
         </div>
         <div style={{display:"flex",gap:8,paddingTop:8,borderTop:"1px solid #dce3ea"}}>
@@ -1546,43 +1761,6 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     if(tab==="register") return(
       <div>
         {/* Manual Leave Entry card */}
-        <div style={{fontSize:14,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>📋 Manual Leave Entry</div>
-        <div style={{...s.card,marginBottom:16,borderLeft:"3px solid #c4a227"}}>
-          <div style={{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:8}}>⚠️ For Maternity, Half Pay & No Pay Leave only — approved by Department</div>
-          <label style={s.label}>Staff Member</label>
-          <select style={{...s.select,marginBottom:8}} id="ml-emp">
-            <option value="">— Select staff —</option>
-            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
-          </select>
-          <label style={s.label}>Leave Type</label>
-          <select style={{...s.select,marginBottom:8}} id="ml-type">
-            <option value="Maternity Leave">Maternity Leave (84 days)</option>
-            <option value="Half Pay Leave">Half Pay Leave</option>
-            <option value="No Pay Leave">No Pay Leave</option>
-          </select>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-            <div><label style={s.label}>From</label><input type="date" style={s.input} id="ml-from" /></div>
-            <div><label style={s.label}>To</label><input type="date" style={s.input} id="ml-to" /></div>
-          </div>
-          <label style={s.label}>Department Reference / Reason</label>
-          <input style={{...s.input,marginBottom:10}} id="ml-reason" placeholder="e.g. Dept. approval ref: DTET/2026/..." />
-          <button style={{...s.btn("gold"),width:"100%",padding:"11px 0"}} onClick={()=>{
-            const empNo=document.getElementById("ml-emp")?.value;
-            const type=document.getElementById("ml-type")?.value;
-            const from=document.getElementById("ml-from")?.value;
-            const to=document.getElementById("ml-to")?.value;
-            const reason=document.getElementById("ml-reason")?.value;
-            if(!empNo||!from||!to||!reason){alert("Please fill all fields.");return;}
-            const days=countWD(from,to);
-            if(days<=0){alert("No working days in range.");return;}
-            const rec={id:Date.now(),type,from,to,days,reason,status:"Approved",appliedOn:today(),approvedOn:today(),approvedBy:currentUser?.fullName||"Leave Officer",medCertRequired:false,medCertReceived:false,manualEntry:true};
-            setLeaveRecords(prev=>{const n={...prev,[empNo]:[...(prev[empNo]||[]),rec]};return n;});
-            dbInsert("leave_records",{emp_no:empNo,...rec}).catch(e=>console.error(e));
-            alert("Manual leave entry recorded: "+type+" for "+days+" days.");
-            ["ml-emp","ml-from","ml-to","ml-reason"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
-          }}>✅ Record Manual Leave</button>
-        </div>
-
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📓 Leave Register (Gen 190)</div>
         <label style={s.label}>Month</label>
         <input type="month" style={{...s.input,marginBottom:12}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
@@ -1598,6 +1776,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           <label style={s.label}>Leave Type</label>
           <select style={{...s.select,marginBottom:8}} id="ml-type">
             <option value="Maternity Leave">Maternity Leave (84 days)</option>
+            <option value="Duty Leave">Duty Leave</option>
             <option value="Half Pay Leave">Half Pay Leave</option>
             <option value="No Pay Leave">No Pay Leave</option>
           </select>
@@ -2160,57 +2339,116 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     // ── FINGER SCAN SYNC (ICT) ───────────────────────────────────
     if(tab==="scan") return(
       <div>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>🖐 Finger Scan System</div>
-        <div style={{...s.card,borderColor:"rgba(56,189,248,0.2)",background:"rgba(56,189,248,0.05)"}}>
-          <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>Auto-Sync from Finger Scanner</div>
-          <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Imports scan-in times and auto-classifies all staff:</div>
-          <div style={{fontSize:11,color:"#64748b",lineHeight:2,marginBottom:14}}>
-            ✅ Scan ≤ 08:30 → <b>Present</b><br/>
-            ⏱ Scan 08:31–09:00 → <b>Minor Late</b> (every 2 forgiven, no cover)<br/>
-            🔴 Scan after 09:00 → <b>Late</b> (must cover until 16:45)<br/>
-            ✗ No scan → <b>Absent</b><br/>
-            📋 On approved leave → auto-excluded
+        <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>📂 Import Attendance from Finger Scanner</div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Upload the daily Excel file exported from the biometric machine — attendance is processed automatically.</div>
+
+        {/* Upload card */}
+        <div style={{...s.card,border:"2px dashed #3b82f6",background:"#eff6ff",marginBottom:14}}>
+          <div style={{textAlign:"center",padding:"8px 0"}}>
+            <div style={{fontSize:32,marginBottom:8}}>📊</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#1d4ed8",marginBottom:6}}>Drop Excel File or Click to Upload</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Supported: .xlsx — Columns needed: Employee ID, Date, Time (or DateTime)</div>
+            <input type="file" accept=".xlsx,.xls" id="xlsx-upload" style={{display:"none"}}
+              onChange={e=>{
+                const file=e.target.files?.[0];
+                if(!file)return;
+                const reader=new FileReader();
+                reader.onload=async(ev)=>{
+                  try{
+                    // Dynamically import SheetJS
+                    const XLSX=await import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs");
+                    const wb=XLSX.read(new Uint8Array(ev.target.result),{type:"array",cellDates:true});
+                    const ws=wb.Sheets[wb.SheetNames[0]];
+                    const rows=XLSX.utils.sheet_to_json(ws,{raw:false,dateNF:"YYYY-MM-DD"});
+                    processXlsxRows(rows, file.name);
+                  }catch(err){
+                    alert("Error reading file: "+err.message);
+                  }
+                };
+                reader.readAsArrayBuffer(file);
+                e.target.value="";
+              }}
+            />
+            <button style={{...s.btn("primary"),padding:"11px 28px",fontSize:14}}
+              onClick={()=>document.getElementById("xlsx-upload").click()}>
+              📂 Choose Excel File
+            </button>
           </div>
-          <label style={s.label}>Select Date</label>
-          <input type="date" style={{...s.input,marginBottom:12}} value={attDate} onChange={e=>setAttDate(e.target.value)} />
-          <button style={{...s.btn("primary"),width:"100%",padding:"14px 0",fontSize:15}} onClick={()=>syncFingerScan(attDate)}>
-            🖐 Sync Finger Scan for {attDate}
-          </button>
+        </div>
+
+        {/* Column mapping helper */}
+        <div style={{...s.card,marginBottom:14,padding:"12px 14px"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#1d4ed8",marginBottom:8}}>📋 Expected Excel Format</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>
+            {[["Employee ID","E001, W001..."],["Date","2026-04-10 or 10/04/2026"],["Time","08:28:00 or 08:28"]].map(([h,ex])=>(
+              <div key={h} style={{background:"#f8fafc",borderRadius:8,padding:"8px 10px",border:"1px solid #e2e8f0"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#1d4ed8"}}>{h}</div>
+                <div style={{fontSize:10,color:C.muted}}>{ex}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:11,color:C.muted}}>✓ Multiple scans per employee per day are fine — system uses first=check-in, last=check-out<br/>✓ Duplicate rows are safe and preserved for audit</div>
+        </div>
+
+        {/* Processing status */}
+        {xlsxLog.length>0&&<>
+          <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:8,textTransform:"uppercase"}}>📋 Import Log</div>
+          <div style={{...s.card,padding:"10px 14px",marginBottom:14,maxHeight:200,overflowY:"auto"}}>
+            {xlsxLog.map((line,i)=>(
+              <div key={i} style={{fontSize:11,color:line.startsWith("✓")?C.success:line.startsWith("✗")?C.danger:line.startsWith("⚠")?C.warn:"#334155",padding:"2px 0",borderBottom:"1px solid #f1f5f9"}}>{line}</div>
+            ))}
+          </div>
+        </>}
+
+        {/* Results for selected date */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div style={{fontSize:13,fontWeight:700}}>📅 View Results</div>
+          <input type="date" style={{...s.input,width:160,fontSize:13,padding:"8px 10px"}} value={attDate} onChange={e=>setAttDate(e.target.value)} />
         </div>
         {scanData[attDate]&&<>
-          <div style={{fontSize:12,color:C.muted,fontWeight:700,marginTop:16,marginBottom:8}}>Scan Results — {attDate}</div>
-          {/* Summary */}
-          <div style={{...s.card,padding:"10px 12px",marginBottom:12}}>
-            {[{l:"On time (≤08:30)",v:STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,OFFICE_START)<=0;}).length,c:C.success},
-              {l:"Minor late (08:31–09:00)",v:STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,OFFICE_START)>0&&timeCmp(t,LATE_GRACE)<=0;}).length,c:"#84cc16"},
-              {l:"Late (>09:00, cover til 16:45)",v:STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,LATE_GRACE)>0;}).length,c:C.warn},
-              {l:"No scan (absent)",v:STAFF.filter(e=>!scanData[attDate]?.[e.empNo]).length,c:C.danger},
-            ].map(st=><div key={st.l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
-              <span style={{fontSize:12,color:"#94a3b8"}}>{st.l}</span><b style={{color:st.c}}>{st.v}</b>
-            </div>)}
+          {/* Stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6,marginBottom:12}}>
+            {[
+              {l:"Present (≤08:30)",v:ALL_STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,OFFICE_START)<=0;}).length,c:C.success},
+              {l:"Minor Late (08:31–09:00)",v:ALL_STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,OFFICE_START)>0&&timeCmp(t,LATE_GRACE)<=0;}).length,c:"#84cc16"},
+              {l:"Late (after 09:00)",v:ALL_STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,LATE_GRACE)>0;}).length,c:C.warn},
+              {l:"No Scan / Absent",v:ALL_STAFF.filter(e=>!scanData[attDate]?.[e.empNo]&&getAttStatus(e.empNo,attDate)!=="on_leave").length,c:C.danger},
+            ].map(st=>(
+              <div key={st.l} style={{background:st.c+"14",border:`1px solid ${st.c}22`,borderRadius:8,padding:"8px 10px"}}>
+                <div style={{fontSize:20,fontWeight:800,color:st.c}}>{st.v}</div>
+                <div style={{fontSize:10,color:"#94a3b8"}}>{st.l}</div>
+              </div>
+            ))}
           </div>
-          {STAFF.map(emp=>{
+          {/* Staff rows */}
+          {ALL_STAFF.map(emp=>{
             const scanTime=scanData[attDate]?.[emp.empNo];
             const st=getAttStatus(emp.empNo,attDate);
-            const classified=classifyScanIn(scanTime,emp);
-            return <div key={emp.empNo} style={{...s.card,padding:"10px 12px",marginBottom:5}}>
+            const cl=classifyScanIn(scanTime,emp);
+            const chipC=st==="present"?C.success:st==="minor_late"?"#84cc16":st==="late"?C.warn:st==="absent"?C.danger:C.muted;
+            return <div key={emp.empNo} style={{...s.card,padding:"9px 12px",marginBottom:5}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontSize:12,fontWeight:600}}>{emp.fullName}</div>
-                  <div style={{fontSize:12,color:"#64748b"}}>{emp.designation}</div>
-                  {classified.coverUntil&&<div style={{fontSize:10,color:C.warn,fontWeight:700}}>Must cover until {classified.coverUntil}</div>}
-                  {classified.minorLate&&<div style={{fontSize:10,color:"#84cc16"}}>Minor late — counts toward monthly pair</div>}
+                  <div style={{fontSize:12,fontWeight:700}}>{emp.fullName}</div>
+                  <div style={{fontSize:10,color:C.muted}}>{emp.designation}</div>
+                  {cl.coverUntil&&<div style={{fontSize:10,color:C.warn,fontWeight:700}}>⏰ Cover until {cl.coverUntil}</div>}
                 </div>
                 <div style={{textAlign:"right"}}>
-                  {scanTime?<div style={{fontSize:11,color:C.accent,marginBottom:3}}>🖐 {scanTime}</div>:<div style={{fontSize:11,color:C.muted,marginBottom:3}}>No scan</div>}
-                  <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:6,background:st==="present"?C.success+"20":st==="minor_late"?"#84cc1620":st==="late"?C.warn+"20":st==="absent"?C.danger+"20":C.muted+"20",color:st==="present"?C.success:st==="minor_late"?"#84cc16":st==="late"?C.warn:st==="absent"?C.danger:C.muted}}>
-                    {st==="present"?"Present":st==="minor_late"?"Minor Late":st==="late"?"Late":st==="absent"?"Absent":st==="on_leave"?"On Leave":"—"}
+                  {scanTime
+                    ?<div style={{fontSize:11,color:C.accent,marginBottom:2}}>🖐 {scanTime}</div>
+                    :<div style={{fontSize:11,color:C.muted,marginBottom:2}}>No scan</div>
+                  }
+                  <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:6,background:chipC+"20",color:chipC}}>
+                    {st==="present"?"Present":st==="minor_late"?"Minor Late":st==="late"?"Late":st==="on_leave"?"On Leave":"Absent"}
                   </span>
                 </div>
               </div>
             </div>;
           })}
         </>}
+        {!scanData[attDate]&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:13}}>
+          No scan data for {attDate}.<br/>Upload an Excel file above to import attendance.
+        </div>}
       </div>
     );
 
