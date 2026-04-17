@@ -136,22 +136,12 @@ function getEntitlement(emp, year) {
       vacation = Math.round((24/9)*Math.max(0,monthsServed));
     } else vacation = Math.round(24 * (twelveMonths - yearStart) / (twelveMonths - nineMonths));
   } else {
-    // Officer: casual = 21 from any appointment date in that calendar year
-    casual = svcYearsAtYearStart >= -1 ? 21 : 0; // available from joined year
-    // Vacation: first 2 years on appointment basis (24/yr), then calendar year basis
-    // Officers entitled to 24 vacation/sick days per year (Ch.XII Estab. Code)
-    // Full 24 after first year; prorated in joining year; 0 if not yet joined
-    if (svcYearsAtYearStart >= 1) {
-      vacation = 24; // full entitlement from 2nd year onwards
-    } else {
-      // Joining year OR joined mid-year: prorate from joining date to year-end
-      const monthsRemaining = (yearEnd - Math.max(yearStart, joined)) / (30.44*864e5);
-      if (monthsRemaining > 0) {
-        vacation = Math.round((24/12) * Math.min(12, monthsRemaining));
-      } else {
-        vacation = 0; // not yet joined this year
-      }
-    }
+    // Officer: 21 casual days per year from joining date onward
+    casual = joined <= yearEnd ? 21 : 0;
+    // Vacation/Sick: ALL officers get full 24 days per year (Estab. Code Ch.XII)
+    // This applies to Director, Registrar, Leave Officer, ICT Officer and all officers
+    // No proration — 24 days is the annual entitlement for confirmed officers
+    vacation = joined <= yearEnd ? 24 : 0;
   }
   return { casual, vacation, halfPay:0, noPay:0, maternity: emp.gender==="Female"?84:0, special:5, study:10, duty:0 };
 }
@@ -1124,23 +1114,26 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       (myBalances.length ? "Leave balances: "+balStr+". " : "")+
       "Always respond in the same language the user writes in (English or Sinhala). Be brief and accurate.";
 
-    // Build prompt in Mistral instruct format
-    // [INST] system + history + user [/INST]
-    const historyText=chatMsgs.slice(-6).map(m=>
-      m.role==="user"?"[INST] "+m.text+" [/INST]":""+m.text+""
+    // Build prompt — use Zephyr/ChatML format (works with all 3 models)
+    const historyMsgs=chatMsgs.slice(-6).map(m=>
+      m.role==="user"
+        ? "<|user|>\n"+m.text+"</s>"
+        : "<|assistant|>\n"+m.text+"</s>"
     ).join("\n");
 
     const fullPrompt=
-      "<s>[INST] <<SYS>>\n"+sysPrompt+"\n<</SYS>>\n\n"+
-      (historyText?historyText+"\n":"")+
-      msg+" [/INST]";
+      "<|system|>\n"+sysPrompt+"</s>\n"+
+      (historyMsgs?historyMsgs+"\n":"")+
+      "<|user|>\n"+msg+"</s>\n"+
+      "<|assistant|>";
 
     // Try Mistral-7B-Instruct first (best quality, free)
     // Fallback: Llama-2-7b-chat-hf
+    // These models are fully open — no access approval needed
     const models=[
-      "mistralai/Mistral-7B-Instruct-v0.3",
-      "meta-llama/Llama-2-7b-chat-hf",
-      "HuggingFaceH4/zephyr-7b-beta",
+      "HuggingFaceH4/zephyr-7b-beta",          // best open model for chat
+      "mistralai/Mistral-7B-Instruct-v0.1",    // v0.1 is fully open
+      "tiiuae/falcon-7b-instruct",              // open, reliable
     ];
 
     let replied=false;
@@ -1698,13 +1691,13 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
           <div style={{fontSize:16,fontWeight:700}}>{t("🤖 AI Leave Assistant","🤖 AI නිවාඩු සහාය")}</div>
           <div style={{fontSize:10,background:"#f0fdf4",color:"#166534",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontWeight:600}}>
-            🆓 Mistral-7B · Free
+            🆓 Zephyr-7B · Free
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:10}}>
           {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#15803d",fontWeight:600}}>Powered by Mistral-7B (free open-source AI)</span><br/><span style={{color:"#1e3a52",fontSize:11}}>Responds in English or Sinhala</span></div>}
           {chatMsgs.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}><div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"#1565c0":"#f0f4f8",fontSize:13,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.text}</div></div>)}
-          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center",padding:"8px 0"}}>🤔 Mistral is thinking… (first message may take ~20 sec)</div>}
+          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center",padding:"8px 0"}}>🤔 AI is thinking… (first request may take ~20 sec to load)</div>}
           <div ref={chatEnd}/>
         </div>
         <div style={{display:"flex",gap:8,paddingTop:8,borderTop:"1px solid #dce3ea"}}>
