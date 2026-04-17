@@ -1342,9 +1342,9 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"alerts",i:"🚨",l:"Alerts"},{k:"chat",i:"🤖",l:"AI"}],
-    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
-    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"reports",i:"📑",l:"Reports"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
+    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"summary",i:"📊",l:"Summary"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
+    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
     ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"monthly",i:"📊",l:"Monthly"},{k:"chat",i:"🤖",l:"AI"}],
   };
   const navItems = navByRole[userRole]||navByRole.staff;
@@ -1652,7 +1652,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             <label style={s.label}>Select Staff Member</label>
             <select style={{...s.select,marginBottom:12}} value={summaryEmp} onChange={e=>setSummaryEmp(e.target.value)}>
               <option value="">— Select staff member —</option>
-              {STAFF.filter(e=>userRole==="registrar"?e.section==="Non Academic":true).map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
+              {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
             </select>
           </>}
           <label style={s.label}>Period</label>
@@ -1969,36 +1969,44 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     // ── REPORTS ──────────────────────────────────────────────────
     if(tab==="reports") return(
       <div>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>{t("📑 Reports & Letters","📑 වාර්තා සහ ලිපි")}</div>
-
-        {/* ── Gen 190 Monthly Report ── */}
-        <div style={{...{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.15)"},padding:"12px 14px",marginBottom:10}}>
-          <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📓 Monthly Leave Register — Gen 190</div>
-          <label style={{...s.label}}>{t("Select Month","මාසය තෝරන්න")}</label>
-          <input type="month" style={{...s.input,marginBottom:10}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
-          <button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>setModal({title:`Gen 190 — ${reportMonth}`,content:genMonthlyGen190(leaveRecords,reportMonth)})}>
-            📓 Generate Gen 190 Report
-          </button>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>
+          {userRole==="director"?"📊 All Staff Leave Overview":"📑 Reports & Letters"}
         </div>
 
-        {/* ── Leave Summary per staff ── */}
-        <div style={{...{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:20,marginBottom:14,boxShadow:"0 2px 8px rgba(0,0,0,0.15)"},padding:"12px 14px",marginBottom:10}}>
-          <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📊 Leave Summary — Any Staff Member</div>
-          <label style={{...s.label}}>{t("Staff Member","සේවකයා")}</label>
+        {/* ── Gen 190 Monthly Report (Leave Officer + Director) ── */}
+        {(userRole==="leave_officer"||userRole==="director")&&(
+          <div style={{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+            <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📓 Monthly Leave Register — Gen 190</div>
+            <label style={s.label}>{t("Select Month","මාසය")}</label>
+            <input type="month" style={{...s.input,marginBottom:10}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
+            <button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>setModal({title:`Gen 190 — ${reportMonth}`,content:genMonthlyGen190(leaveRecords,reportMonth)})}>
+              📓 {t("Generate Gen 190 Report","Gen 190 ජනනය")}
+            </button>
+          </div>
+        )}
+
+        {/* ── Leave Summary per staff (ALL roles that have reports tab) ── */}
+        <div style={{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+          <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📊 {t("Leave Summary — Any Staff Member","ඕනෑම සේවකයෙකුගේ සාරාංශ")}</div>
+          <label style={s.label}>{t("Staff Member","සේවකයා")}</label>
           <select style={{...s.select,marginBottom:8}} value={summaryEmp} onChange={e=>setSummaryEmp(e.target.value)}>
-            <option value="">— Select staff member —</option>
-            {STAFF.filter(e=>userRole==="registrar"?e.section==="Non Academic":true).map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
+            <option value="">— {t("Select staff member","සේවකයා තෝරන්න")} —</option>
+            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
           </select>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-            {["year","month","custom"].map(p=><button key={p} style={{...s.btn(summaryPeriod===p?"gold":"outline"),padding:"8px 0",fontSize:11}} onClick={()=>setSummaryPeriod(p)}>{p==="year"?"This Year":p==="month"?"This Month":t("Custom","අභිරුචි")}</button>)}
+            {["year","month","custom"].map(p=>(
+              <button key={p} style={{...s.btn(summaryPeriod===p?"gold":"outline"),padding:"8px 0",fontSize:11}} onClick={()=>setSummaryPeriod(p)}>
+                {p==="year"?"This Year":p==="month"?"This Month":t("Custom","අභිරුචි")}
+              </button>
+            ))}
           </div>
           {summaryPeriod==="custom"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-            <div><label style={{...s.label}}>{t("From","සිට")}</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
-            <div><label style={{...s.label}}>{t("To","දක්වා")}</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
+            <div><label style={s.label}>{t("From","සිට")}</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
+            <div><label style={s.label}>{t("To","දක්වා")}</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
           </div>}
-          {summaryEmp&&<button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>{
-            const emp=STAFF.find(e=>e.empNo===summaryEmp);
-            if(!emp) return;
+          {summaryEmp&&<button style={{...s.btn("navy"),width:"100%",padding:"11px 0",marginTop:4}} onClick={()=>{
+            const emp=ALL_STAFF.find(e=>e.empNo===summaryEmp);
+            if(!emp)return;
             const from=summaryPeriod==="year"?`${currYear}-01-01`:summaryPeriod==="month"?today().slice(0,7)+"-01":summaryFrom;
             const to=summaryPeriod==="custom"?summaryTo:today();
             const label=summaryPeriod==="year"?`Year ${currYear}`:summaryPeriod==="month"?`Month ${today().slice(0,7)}`:`${summaryFrom} to ${summaryTo}`;
@@ -2006,47 +2014,98 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           }}>{t("📊 Generate Summary Report","📊 සාරාංශ ජනනය")}</button>}
         </div>
 
-        {/* ── DTET Letters ── */}
-        <div style={s.sectionTitle||{}}>📄 DTET Department Letters</div>
-        {STAFF.filter(e=>userRole==="registrar"?e.section==="Non Academic":true).map(e=>(
-          <div key={e.empNo} style={{...s.card,marginBottom:6}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:600,color:"#1a3a5c"}}>{e.fullName}</div>
-                <div style={{fontSize:10,color:"#64748b"}}>{e.designation} · {e.section}</div>
-              </div>
-              <button style={{...s.btn("navy"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET — ${e.fullName}`,content:genDTETLetter(e,leaveRecords)})}>{t("📄 DTET","📄 DTET")}</button>
+        {/* ── All staff leave overview cards (Director sees everyone) ── */}
+        {userRole==="director"&&(
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>
+              👥 All Staff — Current Year Leave Status
             </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {isAbnormal(e,leaveRecords).abnormal&&(
-                <button style={{...s.btn("danger"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Advisory — ${e.fullName}`,content:genAbnormalLetter(e,leaveRecords)})}>{t("🚨 Advisory Letter","🚨 උපදේශ ලිපිය")}</button>
-              )}
-              {medCertOverdue(e,leaveRecords).length>0&&(
-                <button style={{...s.btn("warn"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Med Reminder — ${e.fullName}`,content:genMedCertReminder(e,medCertOverdue(e,leaveRecords))})}>{t("🏥 Med Reminder","🏥 වෛද්‍ය")}</button>
-              )}
-            </div>
+            {ALL_STAFF.map(e=>{
+              const bals=getLeaveBalance(e,leaveRecords,currYear);
+              const casualBal=bals.find(b=>b.type==="Casual Leave");
+              const vacBal=bals.find(b=>b.type==="Vacation/Sick Leave");
+              const myRecs=(leaveRecords[e.empNo]||[]);
+              const pending_count=myRecs.filter(r=>r.status==="Pending"||r.status==="LO Recommended"||r.status==="Reg Recommended").length;
+              const approved_count=myRecs.filter(r=>r.status==="Approved").length;
+              return(
+                <div key={e.empNo} style={{...s.card,padding:"12px 14px",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700}}>{e.fullName}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{e.designation} · {e.section}</div>
+                      <div style={{display:"flex",gap:10,marginTop:6,flexWrap:"wrap"}}>
+                        {casualBal&&<span style={{fontSize:10,color:"#3b82f6",fontWeight:600}}>📋 Casual: {casualBal.balance}/{casualBal.total}</span>}
+                        {vacBal&&<span style={{fontSize:10,color:"#22c55e",fontWeight:600}}>🌴 Vac/Sick: {vacBal.balance}/{vacBal.total}</span>}
+                        {pending_count>0&&<span style={{fontSize:10,color:C.warn,fontWeight:600}}>⏳ {pending_count} pending</span>}
+                        {approved_count>0&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>✅ {approved_count} approved</span>}
+                      </div>
+                    </div>
+                    <button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>{
+                      const from=`${currYear}-01-01`;
+                      const to=today();
+                      setModal({title:`Leave Records — ${e.fullName}`,content:genLeaveSummary(e,leaveRecords,from,to,`Year ${currYear}`)});
+                    }}>📋 View</button>
+                  </div>
+                  {/* Recent leaves */}
+                  {myRecs.length>0&&<div style={{marginTop:8,borderTop:"1px solid #e2e8f0",paddingTop:8}}>
+                    {[...myRecs].reverse().slice(0,2).map(r=>(
+                      <div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                        <span style={{fontSize:10,color:C.text}}>{r.type} · {r.from} → {r.to} ({r.days}d)</span>
+                        <span style={{...s.badge(r.status),fontSize:9}}>{r.status}</span>
+                      </div>
+                    ))}
+                  </div>}
+                </div>
+              );
+            })}
           </div>
-        ))}
+        )}
+
+        {/* ── DTET Letters (Leave Officer only) ── */}
+        {userRole==="leave_officer"&&(
+          <>
+            <div style={{fontSize:13,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>📄 DTET Department Letters</div>
+            {ALL_STAFF.map(e=>(
+              <div key={e.empNo} style={{...s.card,marginBottom:6}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600}}>{e.fullName}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{e.designation} · {e.section}</div>
+                  </div>
+                  <button style={{...s.btn("navy"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET — ${e.fullName}`,content:genDTETLetter(e,leaveRecords)})}>📄 DTET</button>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {isAbnormal(e,leaveRecords).abnormal&&(
+                    <button style={{...s.btn("danger"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Advisory — ${e.fullName}`,content:genAbnormalLetter(e,leaveRecords)})}>🚨 Advisory Letter</button>
+                  )}
+                  {medCertOverdue(e,leaveRecords).length>0&&(
+                    <button style={{...s.btn("warn"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Med Reminder — ${e.fullName}`,content:genMedCertReminder(e,medCertOverdue(e,leaveRecords))})}>🏥 Med Reminder</button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Alerts section inside reports for leave officer */}
+            <div style={{fontSize:13,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.5,margin:"14px 0 8px"}}>🚨 Leave Alerts</div>
+            {ALL_STAFF.map(e=>{
+              const ab=isAbnormal(e,leaveRecords);
+              const overdue=medCertOverdue(e,leaveRecords);
+              if(!ab.abnormal&&overdue.length===0) return null;
+              return(
+                <div key={e.empNo} style={{...s.card,borderLeft:`3px solid ${ab.severe?C.danger:C.warn}`,marginBottom:8,padding:"10px 14px"}}>
+                  <div style={{fontSize:13,fontWeight:700}}>{e.fullName}</div>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{e.designation}</div>
+                  {ab.severe&&<div style={{fontSize:11,color:C.danger}}>🚨 Leave entitlement exhausted — advisory letter should be issued</div>}
+                  {ab.abnormal&&!ab.severe&&<div style={{fontSize:11,color:C.warn}}>⚠️ Leave usage exceeds 75% of annual entitlement</div>}
+                  {overdue.length>0&&<div style={{fontSize:11,color:C.danger}}>🏥 Medical certificate overdue for {overdue.length} period(s)</div>}
+                </div>
+              );
+            }).filter(Boolean)}
+          </>
+        )}
       </div>
     );
 
-    // ── LETTERS (Registrar) ──────────────────────────────────────
-    if(tab==="letters") return(
-      <div>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📄 Letters & Documents</div>
-        {STAFF.filter(e=>e.section==="Non Academic").map(e=>(
-          <div key={e.empNo} style={{...s.card,marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>{e.fullName}</div>
-            <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{e.designation}</div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <button style={{...s.btn("primary"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET Letter`,content:genDTETLetter(e,leaveRecords)})}>{t("📄 DTET","📄 DTET")}</button>
-              {isAbnormal(e,leaveRecords).abnormal&&<button style={{...s.btn("danger"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`Advisory`,content:genAbnormalLetter(e,leaveRecords)})}>🚨 Advisory</button>}
-              {medCertOverdue(e,leaveRecords).length>0&&<button style={{...s.btn("warn"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`Med Cert`,content:genMedCertReminder(e,medCertOverdue(e,leaveRecords))})}>🏥 Reminder</button>}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
 
     // ── DIRECTOR SETTINGS ────────────────────────────────────────
     if(tab==="settings") return(
