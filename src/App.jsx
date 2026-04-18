@@ -528,6 +528,8 @@ export default function App() {
   const chatEnd = useRef(null);
   const [chatMsgs, setChatMsgs] = useState([]); const [chatInput, setChatInput] = useState(""); const [chatLoading, setChatLoading] = useState(false); const [showChat, setShowChat] = useState(false);
   const [myLeaveSubTab,setMyLeaveSubTab]=useState("apply");
+  const [dutyLetterFile,setDutyLetterFile]=useState(null);
+  const [dutyLetterName,setDutyLetterName]=useState("");
   const [xlsxLog,setXlsxLog]=useState([]);
   useEffect(()=>{ chatEnd.current?.scrollIntoView({behavior:"smooth"}); },[chatMsgs]);
 
@@ -655,8 +657,9 @@ export default function App() {
     if(currentUser.staffGrade==="junior"&&getSvcYears(currentUser.joined)<1&&form.type===t("Casual Leave","අනියම් නිවාඩු")){setFormMsg({t:"error",m:"Junior staff: casual leave available only after 1 year of continuous service."});return;}
     const bal=myBalances.find(b=>b.type===form.type);
     if(bal&&bal.balance!=="∞"&&bal.balance<days){setFormMsg({t:"error",m:`Insufficient ${form.type}. Available: ${bal.balance} days.`});return;}
-    const rec={id:Date.now(),type:form.type,from:form.from,to:form.to,days,reason:form.reason,status:"Pending",appliedOn:today(),approvedOn:"",approvedBy:"",medCertRequired:form.type==="Vacation/Sick Leave",medCertReceived:false};
+    const rec={id:Date.now(),type:form.type,from:form.from,to:form.to,days,reason:form.reason,status:"Pending",appliedOn:today(),approvedOn:"",approvedBy:"",medCertRequired:form.type==="Vacation/Sick Leave",medCertReceived:false,dutyLetter:form.type==="Duty Leave"?dutyLetterFile:null,dutyLetterName:form.type==="Duty Leave"?dutyLetterName:""};
     setLeaveRecords(p=>({...p,[currentUser.empNo]:[...(p[currentUser.empNo]||[]),rec]}));
+    setDutyLetterFile(null);setDutyLetterName("");
     setFormMsg({t:"success",m:`Submitted! ${days} day(s). Ref: ${today()}-${String(rec.id).slice(-4)}`});
     setForm(f=>({...f,from:"",to:"",reason:""}));
   }
@@ -1474,6 +1477,25 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
 
         {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏥 Medical certificate required within 3 working days of leave commencement.</div>}
         {form.type==="Duty Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏛️ Duty Leave: For official duties outside the institute (workshops, meetings, inspections). Must be approved by Director before the date. Attach the official duty letter/notification.</div>}
+        {form.type==="Duty Leave"&&<div style={{...s.card,borderLeft:"3px solid #0891b2",padding:"12px 14px",marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#0891b2",marginBottom:8}}>📎 Attach Official Duty Letter / Notification</div>
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" id="duty-letter-staff" style={{display:"none"}}
+            onChange={e=>{
+              const f=e.target.files?.[0];
+              if(f){
+                const reader=new FileReader();
+                reader.onload=ev=>{setDutyLetterFile(ev.target.result);setDutyLetterName(f.name);};
+                reader.readAsDataURL(f);
+              }
+              e.target.value="";
+            }}
+          />
+          <button style={{...s.btn("outline"),padding:"8px 14px",fontSize:12,marginBottom:6}} onClick={()=>document.getElementById("duty-letter-staff").click()}>
+            📂 Choose File (PDF / Image / Word)
+          </button>
+          {dutyLetterName&&<div style={{fontSize:11,color:"#0891b2",marginTop:4}}>✅ {dutyLetterName} attached</div>}
+          {!dutyLetterName&&<div style={{fontSize:11,color:C.muted}}>No file chosen — please attach the official duty notification</div>}
+        </div>}
         {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>💡 If you exceed your annual Vacation/Sick leave entitlement, the excess days are automatically treated as No Pay Leave by the Department — you do not need to apply for No Pay Leave separately. If you have accumulated Vacation/Sick leave from previous years, you may use that balance to cover the excess.</div>}
         <label style={s.label}>From Date</label>
         <input type="date" style={{...s.input,marginBottom:12}} value={form.from} onChange={e=>setForm(f=>({...f,from:e.target.value}))} />
@@ -1546,6 +1568,25 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             ))}
             {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏥 {t("Medical certificate required within 3 working days.","වෛද්‍ය සහතිකය වැඩ කරන දින 3ක් ඇතුළත.")}</div>}
             {form.type==="Duty Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>🏛️ {t("Duty Leave: For official duties outside institute. Attach official duty notification. Director must approve before date.","රාජකාරී නිවාඩු: ආයතනයෙන් පිටත නිල රාජකාරී සඳහා. නිල ලිපිය අමුණන්න. Director කලින් අනුමත කළ යුතුය.")}</div>}
+            {form.type==="Duty Leave"&&<div style={{...s.card,borderLeft:"3px solid #0891b2",padding:"12px 14px",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#0891b2",marginBottom:8}}>📎 {t("Attach Official Duty Letter","නිල රාජකාරී ලිපිය අමුණන්න")}</div>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" id="duty-letter-officer" style={{display:"none"}}
+                onChange={e=>{
+                  const f=e.target.files?.[0];
+                  if(f){
+                    const reader=new FileReader();
+                    reader.onload=ev=>{setDutyLetterFile(ev.target.result);setDutyLetterName(f.name);};
+                    reader.readAsDataURL(f);
+                  }
+                  e.target.value="";
+                }}
+              />
+              <button style={{...s.btn("outline"),padding:"8px 14px",fontSize:12,marginBottom:6}} onClick={()=>document.getElementById("duty-letter-officer").click()}>
+                📂 {t("Choose File (PDF / Image / Word)","ගොනුව තෝරන්න")}
+              </button>
+              {dutyLetterName&&<div style={{fontSize:11,color:"#0891b2",marginTop:4}}>✅ {dutyLetterName} {t("attached","අමුණා ඇත")}</div>}
+              {!dutyLetterName&&<div style={{fontSize:11,color:C.muted}}>{t("No file — please attach the official duty notification","ගොනුවක් නැත — නිල දැනුම්දීම අමුණන්න")}</div>}
+            </div>}
             {form.type==="Vacation/Sick Leave"&&<div style={{...s.alertBox("warn"),marginBottom:10}}>💡 {t("If Vacation/Sick leave is exceeded, the Department applies No Pay automatically. If you have accumulated leave from previous years, it can cover the excess.","විවේක/අසනීප නිවාඩු ඉක්මවුවහොත් දෙපාර්තමේන්තුව ස්වයංක්‍රීයව No Pay ලෙස සලකයි. කලින් සිට රැස් කළ නිවාඩු ඇත්නම් එය භාවිත කළ හැක.")}</div>}
             {userRole==="director"&&form.type&&<div style={{...s.alertBox("warn"),marginBottom:10}}>⚠️ {t("You must inform the Director General the day before your leave.","ඔබ නිවාඩු ගැනීමට පෙර දිනයේ Director General ට දැනුම් දිය යුතුය.")}</div>}
             <label style={s.label}>{t("From Date","ආරම්භ දිනය")}</label>
