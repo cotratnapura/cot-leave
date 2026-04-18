@@ -170,9 +170,6 @@ function getLeaveBalance(emp, leaveRecords, year=currYear) {
     "Vacation/Sick Leave": {total:ent.vacation,    color:"#22c55e",icon:"🌴"},
     "Half Pay Leave":      {total:0,               color:"#f59e0b",icon:"🏥"},
     "No Pay Leave":        {total:0,               color:"#6b7280",icon:"📌"},
-    "Maternity Leave":     {total:ent.maternity,   color:"#ec4899",icon:"👶"},
-    "Special Leave":       {total:ent.special,     color:"#0ea5e9",icon:"⭐"},
-    "Study Leave (Local)": {total:ent.study,       color:"#8b5cf6",icon:"📚"},
     "Duty Leave":          {total:0,               color:"#0891b2",icon:"🏛️"},
   };
   return Object.entries(types).map(([type,info])=>{
@@ -1037,7 +1034,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         fromScan:true   // flag: auto-imported from scanner
       };
     });
-    // Batch update attendance
+    // Batch update attendance — React state AND Supabase DB
     if(Object.keys(attendanceUpdates).length>0){
       setAttendance(prev=>{
         const nd={...prev};
@@ -1049,6 +1046,24 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         });
         return nd;
       });
+      // Persist each record to Supabase so it survives reload
+      const upserts=[];
+      Object.entries(attendanceUpdates).forEach(([dateStr,emps])=>{
+        Object.entries(emps).forEach(([empId,val])=>{
+          upserts.push(dbUpsert("attendance",{
+            emp_no:empId, date:dateStr,
+            status:val.status||null,
+            scan_time:val.scanTime||null,
+            minor_late:val.minorLate||false,
+            cover_until:val.coverUntil||null,
+          }));
+        });
+      });
+      Promise.all(upserts)
+        .then(()=>{ setXlsxLog(prev=>[...prev.filter(l=>!l.startsWith("⏳")),"✅ All attendance saved to database permanently."]); })
+        .catch(e=>{ setXlsxLog(prev=>[...prev.filter(l=>!l.startsWith("⏳")),"⚠️ DB save failed: "+e.message]); });
+      // Show pending message
+      log.push("⏳ Saving to database...");
     }
 
     setScanData(newScanData);
@@ -2015,7 +2030,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         </div>
 
         {/* ── Gen 190 Monthly Report (Leave Officer + Director) ── */}
-        {(userRole==="leave_officer"||userRole==="director")&&(
+        {userRole==="leave_officer"&&(
           <div style={{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
             <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📓 Monthly Leave Register — Gen 190</div>
             <label style={s.label}>{t("Select Month","මාසය")}</label>
