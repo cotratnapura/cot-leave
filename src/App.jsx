@@ -527,6 +527,7 @@ export default function App() {
   const [myLeaveSubTab,setMyLeaveSubTab]=useState("apply");
   const [dutyLetterFile,setDutyLetterFile]=useState(null);
   const [dutyLetterName,setDutyLetterName]=useState("");
+  const [histBalances,setHistBalances]=useState({}); // {empNo: [{year,casual,vacation,notes}]}
   const [xlsxLog,setXlsxLog]=useState([]);
   useEffect(()=>{ chatEnd.current?.scrollIntoView({behavior:"smooth"}); },[chatMsgs]);
 
@@ -1086,126 +1087,75 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     setChatMsgs(p=>[...p,{role:"user",text:msg}]);
     setChatLoading(true);
 
-    const hfKey=import.meta.env.VITE_HF_KEY||"";
-    if(!hfKey){
+    const apiKey=import.meta.env.VITE_GROQ_KEY||"";
+    if(!apiKey){
       setChatMsgs(p=>[...p,{role:"assistant",text:
         "⚠️ AI bot not configured yet.\n\n"+
-        "To enable FREE AI (Mistral / LLaMA):\n"+
-        "1. Go to huggingface.co → Sign up (free)\n"+
-        "2. Profile → Settings → Access Tokens\n"+
-        "3. Create token (Read permission)\n"+
-        "4. Vercel → project → Settings → Environment Variables\n"+
-        "5. Add: VITE_HF_KEY = hf_...\n"+
-        "6. Redeploy\n\n"+
-        "100% free — no credit card needed."
+        "To enable FREE AI (Llama 3, instant responses):\n"+
+        "1. Go to console.groq.com → Sign up free\n"+
+        "2. Click API Keys → Create API Key\n"+
+        "3. Vercel → project → Settings → Environment Variables\n"+
+        "4. Add: VITE_GROQ_KEY = gsk_...\n"+
+        "5. Redeploy\n\n"+
+        "100% free — no credit card. Instant responses (no loading wait)."
       }]);
       setChatLoading(false);return;
     }
 
-    // System prompt with full leave rules
     const balStr=myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
     const sysPrompt=
       "You are the official Leave Management Assistant for College of Technology Ratnapura (COT Ratnapura), "+
       "under DTET Sri Lanka. Answer questions about leave rules accurately and concisely. "+
       "KEY RULES: "+
       "Casual Leave: 21 days/year for officers; 0 in first year then 21/yr for junior staff; max 6 days at once. "+
-      "Vacation/Sick Leave: 24 days/year for ALL officers including Director, Registrar, Leave Officer, ICT Officer; "+
-      "junior staff prorated first 9 months then 24/yr. Medical certificate required within 3 working days. "+
+      "Vacation/Sick Leave: 24 days/year for ALL officers (Director, Registrar, Leave Officer, ICT Officer) and confirmed staff. "+
       "Compensatory Leave: earned by working on weekends/public holidays; valid 1 year; half-day possible. "+
-      "Duty Leave: for official duties outside institute (workshops, meetings, inspections); Director must approve before date. "+
-      "No Pay Leave: Department applies automatically when Vacation/Sick leave is exceeded. "+
-      "Half Pay Leave & Maternity Leave (84 days): recorded by Leave Officer — not self-applied. "+
+      "Duty Leave: for official duties outside institute; Director must approve before date; attach official letter. "+
+      "No Pay Leave: applied automatically by Department when Vacation/Sick leave exceeded — not self-applied. "+
+      "Half Pay Leave & Maternity Leave (84 days): recorded by Leave Officer only — not self-applied. "+
       "Short Leave: 2 per month; AM 8:30-10:00; PM officer 14:45-16:15 / junior 15:00-16:15. "+
-      "Late arrival: up to 09:00 = minor late (2 forgiven per month); after 09:00 = must stay until 16:45. "+
-      "Approval workflow — Academic staff: Director approves directly. "+
-      "Non-Academic staff: Leave Officer recommends → Registrar recommends → Director approves. "+
+      "Late arrival rules: arrive by 09:00 = minor late (2 forgiven per month); after 09:00 = must stay until 16:45. "+
+      "Approval workflow: Academic staff — Director approves directly. "+
+      "Non-Academic: Leave Officer recommends → Registrar recommends → Director approves. "+
       "Director own leave: must inform Director General (DG) the day before (DTET/04/PF/01/15). "+
       "Gen 125a: official leave form; acting officer must be named. "+
-      "Gen 190: monthly leave register. "+
-      "DTET Circular DTET/04/PF/01/15 dated 2026.03.26 governs all leave procedures. "+
-      "Sinhala terms: Casual=අනියම් නිවාඩු, Vacation=විවේක නිවාඩු, Sick=අසනීප නිවාඩු, "+
-      "Compensatory=හිලව් නිවාඩු, Duty=රාජකාරී නිවාඩු, No Pay=වැටුප් රහිත නිවාඩු. "+
+      "Gen 190: monthly leave register (managed by Leave Officer). "+
       (currentUser
         ? "Current user: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+
           ", grade: "+currentUser.staffGrade+", joined: "+currentUser.joined+". "
         : "")+
-      (myBalances.length ? "Leave balances: "+balStr+". " : "")+
-      "Always respond in the same language the user writes in (English or Sinhala). Be brief and accurate.";
+      (myBalances.length ? "Their leave balances: "+balStr+". " : "")+
+      "Respond in the same language as the question (English or Sinhala). Be concise and helpful.";
 
-    // Build prompt — use Zephyr/ChatML format (works with all 3 models)
-    const historyMsgs=chatMsgs.slice(-6).map(m=>
-      m.role==="user"
-        ? "<|user|>\n"+m.text+"</s>"
-        : "<|assistant|>\n"+m.text+"</s>"
-    ).join("\n");
+    const history=chatMsgs.slice(-6).map(m=>({
+      role:m.role==="user"?"user":"assistant",
+      content:m.text
+    }));
 
-    const fullPrompt=
-      "<|system|>\n"+sysPrompt+"</s>\n"+
-      (historyMsgs?historyMsgs+"\n":"")+
-      "<|user|>\n"+msg+"</s>\n"+
-      "<|assistant|>";
-
-    // Try Mistral-7B-Instruct first (best quality, free)
-    // Fallback: Llama-2-7b-chat-hf
-    // These models are fully open — no access approval needed
-    const models=[
-      "HuggingFaceH4/zephyr-7b-beta",          // best open model for chat
-      "mistralai/Mistral-7B-Instruct-v0.1",    // v0.1 is fully open
-      "tiiuae/falcon-7b-instruct",              // open, reliable
-    ];
-
-    let replied=false;
-    for(const model of models){
-      try{
-        const res=await fetch(
-          "https://api-inference.huggingface.co/models/"+model,
-          {
-            method:"POST",
-            headers:{
-              "Authorization":"Bearer "+hfKey,
-              "Content-Type":"application/json"
-            },
-            body:JSON.stringify({
-              inputs:fullPrompt,
-              parameters:{
-                max_new_tokens:400,
-                temperature:0.3,
-                top_p:0.9,
-                repetition_penalty:1.1,
-                return_full_text:false
-              }
-            })
-          }
-        );
-        if(res.status===503){
-          // Model loading — wait and retry once
-          await new Promise(r=>setTimeout(r,8000));
-          const res2=await fetch(
-            "https://api-inference.huggingface.co/models/"+model,
-            {method:"POST",headers:{"Authorization":"Bearer "+hfKey,"Content-Type":"application/json"},
-             body:JSON.stringify({inputs:fullPrompt,parameters:{max_new_tokens:400,temperature:0.3,top_p:0.9,repetition_penalty:1.1,return_full_text:false}})}
-          );
-          if(!res2.ok) continue;
-          const d2=await res2.json();
-          const txt2=(Array.isArray(d2)?d2[0]?.generated_text:d2?.generated_text)||"";
-          if(txt2.trim()){
-            setChatMsgs(p=>[...p,{role:"assistant",text:cleanReply(txt2)}]);
-            replied=true;break;
-          }
-          continue;
-        }
-        if(!res.ok) continue;
-        const data=await res.json();
-        const text=(Array.isArray(data)?data[0]?.generated_text:data?.generated_text)||"";
-        if(text.trim()){
-          setChatMsgs(p=>[...p,{role:"assistant",text:cleanReply(text)}]);
-          replied=true;break;
-        }
-      }catch(e){ continue; }
-    }
-    if(!replied){
-      setChatMsgs(p=>[...p,{role:"assistant",text:
-        "❌ Could not get a response. The model may be loading (first request takes ~20 seconds). Please try again."}]);
+    try{
+      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "Authorization":"Bearer "+apiKey
+        },
+        body:JSON.stringify({
+          model:"llama3-8b-8192",
+          messages:[{role:"system",content:sysPrompt},...history,{role:"user",content:msg}],
+          max_tokens:500,
+          temperature:0.3
+        })
+      });
+      const data=await res.json();
+      if(!res.ok){
+        const err=data?.error?.message||"API error";
+        setChatMsgs(p=>[...p,{role:"assistant",text:"❌ "+err}]);
+      } else {
+        const reply=data?.choices?.[0]?.message?.content||"No response.";
+        setChatMsgs(p=>[...p,{role:"assistant",text:reply.trim()}]);
+      }
+    }catch(e){
+      setChatMsgs(p=>[...p,{role:"assistant",text:"Connection error. Please check your internet and try again."}]);
     }
     setChatLoading(false);
   }
@@ -1360,10 +1310,10 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"reports",i:"📑",l:"Reports"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"scan",i:"📂",l:"Upload"},{k:"reports",i:"📑",l:"Reports"},{k:"chat",i:"🤖",l:"AI"}],
     registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"summary",i:"📊",l:"Summary"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
     director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
-    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"monthly",i:"📊",l:"Monthly"},{k:"chat",i:"🤖",l:"AI"}],
+    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"📂",l:"Upload"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
   };
   const navItems = navByRole[userRole]||navByRole.staff;
 
@@ -1747,13 +1697,13 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
           <div style={{fontSize:16,fontWeight:700}}>{t("🤖 AI Leave Assistant","🤖 AI නිවාඩු සහාය")}</div>
           <div style={{fontSize:10,background:"#f0fdf4",color:"#166534",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontWeight:600}}>
-            🆓 Zephyr-7B · Free
+            🆓 Llama 3 · Free
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:10}}>
-          {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#15803d",fontWeight:600}}>Powered by Mistral-7B (free open-source AI)</span><br/><span style={{color:"#1e3a52",fontSize:11}}>Responds in English or Sinhala</span></div>}
+          {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#15803d",fontWeight:600}}>Powered by Llama 3 via Groq (free, instant)</span><br/><span style={{color:"#1e3a52",fontSize:11}}>Responds in English or Sinhala</span></div>}
           {chatMsgs.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}><div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"#1565c0":"#f0f4f8",fontSize:13,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.text}</div></div>)}
-          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center",padding:"8px 0"}}>🤔 AI is thinking… (first request may take ~20 sec to load)</div>}
+          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center",padding:"8px 0"}}>🤔 Thinking…</div>}
           <div ref={chatEnd}/>
         </div>
         <div style={{display:"flex",gap:8,paddingTop:8,borderTop:"1px solid #dce3ea"}}>
@@ -1811,6 +1761,65 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       <div>
         {/* Manual Leave Entry card */}
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📓 Leave Register (Gen 190)</div>
+        {/* ── Historical Leave Balance Entry ── */}
+        <div style={{fontSize:13,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8,marginTop:4}}>📚 Service History — Past Leave Balances</div>
+        <div style={{background:"#fff",border:"2px solid #1d4ed8",borderRadius:14,padding:16,marginBottom:16}}>
+          <div style={{fontSize:12,color:"#1d4ed8",fontWeight:600,marginBottom:10}}>
+            Enter accumulated Casual &amp; Vacation/Sick leave balances from previous years of service for any staff member.
+            These are used to calculate available carry-forward balances.
+          </div>
+          <label style={s.label}>Staff Member</label>
+          <select style={{...s.select,marginBottom:8}} id="hb-emp">
+            <option value="">— Select staff —</option>
+            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
+          </select>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>Year</label>
+              <input type="number" style={s.input} id="hb-year" min="2000" max={currYear-1} placeholder={String(currYear-1)} /></div>
+            <div><label style={s.label}>Casual Balance</label>
+              <input type="number" style={s.input} id="hb-casual" min="0" max="21" placeholder="0" /></div>
+            <div><label style={s.label}>Vacation/Sick Balance</label>
+              <input type="number" style={s.input} id="hb-vacation" min="0" max="24" placeholder="0" /></div>
+          </div>
+          <label style={s.label}>Notes (optional)</label>
+          <input style={{...s.input,marginBottom:10}} id="hb-notes" placeholder="e.g. Balance carried from service at Matara College" />
+          <button style={{background:"#1d4ed8",border:"none",borderRadius:10,padding:"11px 0",color:"#fff",fontWeight:700,fontSize:14,width:"100%",cursor:"pointer"}} onClick={()=>{
+            const empNo=document.getElementById("hb-emp")?.value;
+            const year=document.getElementById("hb-year")?.value;
+            const casual=parseFloat(document.getElementById("hb-casual")?.value||0);
+            const vacation=parseFloat(document.getElementById("hb-vacation")?.value||0);
+            const notes=document.getElementById("hb-notes")?.value||"";
+            if(!empNo||!year){alert("Please select a staff member and enter the year.");return;}
+            const emp=ALL_STAFF.find(e=>e.empNo===empNo);
+            const rec={year:parseInt(year),casual,vacation,notes,addedBy:currentUser?.fullName||"Leave Officer",addedOn:today()};
+            setHistBalances(prev=>{
+              const existing=(prev[empNo]||[]).filter(r=>r.year!==parseInt(year));
+              return {...prev,[empNo]:[...existing,rec].sort((a,b)=>a.year-b.year)};
+            });
+            alert("Saved: "+emp?.fullName+" — Year "+year+": Casual="+casual+" days, Vacation="+vacation+" days");
+            ["hb-emp","hb-year","hb-casual","hb-vacation","hb-notes"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+          }}>✅ Save Historical Balance</button>
+          {/* Show existing records */}
+          {Object.keys(histBalances).length>0&&<>
+            <div style={{fontSize:11,color:C.muted,fontWeight:700,marginTop:12,marginBottom:6,textTransform:"uppercase"}}>Saved Records</div>
+            {Object.entries(histBalances).map(([empNo,recs])=>{
+              const emp=ALL_STAFF.find(e=>e.empNo===empNo);
+              return recs.length>0&&(
+                <div key={empNo} style={{borderTop:"1px solid #e2e8f0",paddingTop:8,marginTop:4}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#1d4ed8",marginBottom:4}}>{emp?.fullName||empNo}</div>
+                  {recs.map((r,i)=>(
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#334155",padding:"2px 0",borderBottom:"1px solid #f0f4f8"}}>
+                      <span>📅 {r.year}</span>
+                      <span>📋 Casual: <b>{r.casual}</b>d</span>
+                      <span>🌴 Vac/Sick: <b>{r.vacation}</b>d</span>
+                      <button style={{background:"none",border:"none",color:C.danger,cursor:"pointer",fontSize:11}} onClick={()=>setHistBalances(prev=>({...prev,[empNo]:prev[empNo].filter((_,j)=>j!==i)}))}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </>}
+        </div>
         <label style={s.label}>Month</label>
         <input type="month" style={{...s.input,marginBottom:12}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
         {/* ── Manual Leave Entry (Maternity / Half Pay / No Pay) ── */}
