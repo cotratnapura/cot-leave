@@ -1310,10 +1310,10 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"attendance",i:"📅",l:"Attend."},{k:"reports",i:"📑",l:"Reports"},{k:"chat",i:"🤖",l:"AI"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"📂",l:"Upload"},{k:"chat",i:"🤖",l:"AI"}],
     registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"scan",i:"📂",l:"Upload"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
     director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
-    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"📂",l:"Upload"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
+    ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"scan",i:"📂",l:"Upload"},{k:"summary",i:"📊",l:"Summary"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
   };
   const navItems = navByRole[userRole]||navByRole.staff;
 
