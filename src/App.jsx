@@ -1310,9 +1310,9 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"scan",i:"📂",l:"Upload"},{k:"reports",i:"📑",l:"Reports"},{k:"chat",i:"🤖",l:"AI"}],
-    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"summary",i:"📊",l:"Summary"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
-    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"attendance",i:"📅",l:"Attend."},{k:"reports",i:"📑",l:"Reports"},{k:"chat",i:"🤖",l:"AI"}],
+    registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"scan",i:"📂",l:"Upload"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
+    director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
     ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"attendance",i:"📅",l:"Attend."},{k:"scan",i:"📂",l:"Upload"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
   };
   const navItems = navByRole[userRole]||navByRole.staff;
@@ -2176,6 +2176,10 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     if(tab==="settings") return(
       <div>
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>{t("⚙️ Settings & Admin","⚙️ සැකසුම් සහ පරිපාලන")}</div>
+        {userRole==="registrar"&&<div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
+          👔 As Registrar, you can manage PINs for all staff. Staff add/remove is Director-only.
+        </div>}
+        {userRole==="director"&&<>
         <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>👥 Add New Staff Member</div>
         <div style={{background:"#fff",border:"1px solid #dce3ea",borderRadius:12,padding:16,marginBottom:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
@@ -2326,6 +2330,8 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           </div>}
         </div>
 
+        {/* ── End Director-only block ── */}
+        </>}
         <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:10,marginTop:16,textTransform:"uppercase"}}>{t("PIN Management","PIN කළමනාකරණය")}</div>
         {Object.entries(FIXED_ROLES).map(([empNo,role])=>{
           const emp=STAFF.find(e=>e.empNo===empNo);
@@ -2354,6 +2360,13 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
 
     // ── ATTENDANCE (ICT) ─────────────────────────────────────────
     if(tab==="attendance") {
+      {/* Quick link to scan upload — accessible from attendance tab */}
+      {(userRole==="leave_officer"||userRole==="ict_officer")&&<div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}>
+        <button style={{...s.btn("navy"),padding:"8px 16px",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={()=>setTab("scan")}>
+          📂 Upload Finger Scanner Report
+        </button>
+        <span style={{fontSize:11,color:C.muted}}>Import Excel from biometric machine</span>
+      </div>}
       const attStats = {
         present:  STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="present").length,
         minor:    STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="minor_late").length,
