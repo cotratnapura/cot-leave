@@ -2360,13 +2360,6 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
 
     // ── ATTENDANCE (ICT) ─────────────────────────────────────────
     if(tab==="attendance") {
-      {/* Quick link to scan upload — accessible from attendance tab */}
-      {(userRole==="leave_officer"||userRole==="ict_officer")&&<div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}>
-        <button style={{...s.btn("navy"),padding:"8px 16px",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={()=>setTab("scan")}>
-          📂 Upload Finger Scanner Report
-        </button>
-        <span style={{fontSize:11,color:C.muted}}>Import Excel from biometric machine</span>
-      </div>}
       const attStats = {
         present:  STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="present").length,
         minor:    STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="minor_late").length,
@@ -2377,6 +2370,15 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       };
       return(
         <div>
+          {/* 📂 Upload finger scanner report — Leave Officer */}
+          {userRole==="leave_officer"&&(
+            <div style={{display:"flex",gap:10,alignItems:"center",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+              <button style={{background:"#1e3a5f",border:"none",borderRadius:8,padding:"9px 16px",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}} onClick={()=>setTab("scan")}>
+                📂 Upload Finger Scanner Report
+              </button>
+              <span style={{fontSize:11,color:"#1d4ed8"}}>Import daily Excel from biometric machine to auto-fill attendance</span>
+            </div>
+          )}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <div style={{fontSize:16,fontWeight:700}}>📅 Attendance</div>
             <input type="date" style={{...s.input,width:150,fontSize:13,padding:"8px 10px"}} value={attDate} onChange={e=>setAttDate(e.target.value)} />
