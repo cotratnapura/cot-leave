@@ -583,6 +583,21 @@ export default function App() {
         // Load comp leave
         const comp = await dbGet("comp_leave","?select=*&order=created_at.asc");
         if(comp) setCompLeave(comp);
+
+        // Load leave service history
+        try{
+          const hist=await dbGet("leave_history","?select=*");
+          if(hist&&hist.length>0){
+            const hb={};
+            hist.forEach(r=>{
+              if(!hb[r.emp_no]) hb[r.emp_no]=[];
+              hb[r.emp_no].push({year:r.year,casual:r.casual_bal||0,vacation:r.vacation_bal||0,halfPay:r.half_pay_bal||0,noPay:r.no_pay_bal||0,notes:r.notes||"",addedBy:r.added_by||"",addedOn:r.added_on||""});
+            });
+            Object.keys(hb).forEach(k=>hb[k].sort((a,b)=>a.year-b.year));
+            setHistBalances(hb);
+          }
+        }catch(e){ console.log("leave_history table not found — run Supabase migration"); }
+
         setDbReady(true);
       }catch(e){
         console.error("DB load error:",e);
@@ -1208,8 +1223,8 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       color:st==="present"?"#15803d":st==="absent"?"#dc2626":st==="late"?"#a16207":st==="on_leave"?"#1d4ed8":"#64748b",
       border:`1px solid ${st==="present"?"#86efac":st==="absent"?"#fca5a5":st==="late"?"#fde68a":st==="on_leave"?"#93c5fd":"#e2e8f0"}`,minWidth:70
     }),
-    bottomNav:{position:"fixed",bottom:0,left:0,right:0,background:"#ffffff",borderTop:"1px solid #e2e8f0",display:"flex",zIndex:200,boxShadow:"0 -4px 20px rgba(0,0,0,0.06)"},
-    navItem:(active,col="#1d4ed8")=>({flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"11px 4px 9px",cursor:"pointer",background:"transparent",border:"none",color:active?col:"#94a3b8",fontSize:11,fontWeight:active?700:500,gap:3,borderTop:active?"2.5px solid "+col:"2.5px solid transparent",transition:"color .15s"}),
+    bottomNav:{position:"fixed",bottom:0,left:0,right:0,background:"#ffffff",borderTop:"1px solid #e2e8f0",display:"flex",zIndex:200,boxShadow:"0 -4px 20px rgba(0,0,0,0.06)",overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch"},
+    navItem:(active,col="#1d4ed8")=>({flex:"0 0 auto",minWidth:64,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"11px 4px 9px",cursor:"pointer",background:"transparent",border:"none",color:active?col:"#94a3b8",fontSize:11,fontWeight:active?700:500,gap:3,borderTop:active?"2.5px solid "+col:"2.5px solid transparent",transition:"color .15s"}),
     main:{maxWidth:680,margin:"0 auto",padding:"14px 14px",width:"100%"},
     sectionTitle:{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8,padding:"12px 0 6px"},
     sectionChip:(sec)=>({fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:4,background:sec==="Academic"?"#dbeafe":"#ede9fe",color:sec==="Academic"?"#1d4ed8":"#7c3aed"}),
@@ -1310,7 +1325,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   // ═══════════════════════════════════════════════════════════════
   const navByRole = {
     staff:        [{k:"home",i:"🏠",l:"Home"},{k:"apply",i:"📝",l:"Apply"},{k:"records",i:"📋",l:"Records"},{k:"summary",i:"📊",l:"Summary"},{k:"chat",i:"🤖",l:"AI"}],
-    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"attendance",i:"📅",l:"Attend."},{k:"reports",i:"📑",l:"Reports"},{k:"chat",i:"🤖",l:"AI"}],
+    leave_officer:[{k:"home",i:"🏠",l:"Home"},{k:"pending",i:"⏳",l:t("Pending","අපේක්ෂිත")},{k:"attendance",i:"📅",l:"Attend."},{k:"reports",i:"📑",l:"Reports"},{k:"history",i:"📚",l:"History"},{k:"chat",i:"🤖",l:"AI"}],
     registrar:    [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"scan",i:"📂",l:"Upload"},{k:"settings",i:"⚙️",l:"Settings"},{k:"chat",i:"🤖",l:"AI"}],
     director:     [{k:"home",i:"🏠",l:"Home"},{k:"approve",i:"✅",l:"Approve"},{k:"reports",i:"📑",l:"Reports"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
     ict_officer:  [{k:"home",i:"🏠",l:"Home"},{k:"scan",i:"📂",l:"Upload"},{k:"summary",i:"📊",l:"Summary"},{k:"myapply",i:"📝",l:t("My Leave","මගේ")},{k:"chat",i:"🤖",l:"AI"}],
@@ -1757,69 +1772,454 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     }
 
     // ── LEAVE REGISTER (Leave Officer) ───────────────────────────
-    if(tab==="register") return(
+
+    // ── HISTORY TAB — Full Service Leave History per Staff Member ──────────────
+    if(tab==="history") {
+      const [hEmp,setHEmp]         = useState("");
+      const [hYear,setHYear]       = useState(String(new Date().getFullYear()-1));
+      const [hCasual,setHCasual]   = useState("");
+      const [hVac,setHVac]         = useState("");
+      const [hHalfPay,setHHalfPay] = useState("");
+      const [hNoPay,setHNoPay]     = useState("");
+      const [hNotes,setHNotes]     = useState("");
+      const [hView,setHView]       = useState("");
+      const [hSubTab,setHSubTab]   = useState("entry"); // entry | view | report
+
+      // ── All staff including fixed roles ──────────────────────────────
+      const ALL_HIST_STAFF = ALL_STAFF; // already includes director/registrar/ict
+
+      // ── Compute accumulated totals for a staff member ─────────────────
+      const getAcc = (empNo) => {
+        const recs = histBalances[empNo] || [];
+        return {
+          casual:   recs.reduce((s,r)=>s+(r.casual||0),  0),
+          vacation: recs.reduce((s,r)=>s+(r.vacation||0),0),
+          halfPay:  recs.reduce((s,r)=>s+(r.halfPay||0), 0),
+          noPay:    recs.reduce((s,r)=>s+(r.noPay||0),   0),
+          years:    recs.length,
+        };
+      };
+
+      // ── Save one year record ──────────────────────────────────────────
+      const saveYear = async () => {
+        if(!hEmp || !hYear){ alert("Select a staff member and enter the year."); return; }
+        const yr  = parseInt(hYear);
+        const rec = {
+          year:    yr,
+          casual:  parseFloat(hCasual)||0,
+          vacation:parseFloat(hVac)||0,
+          halfPay: parseFloat(hHalfPay)||0,
+          noPay:   parseFloat(hNoPay)||0,
+          notes:   hNotes,
+          addedBy: currentUser?.fullName||"Leave Officer",
+          addedOn: today(),
+        };
+        setHistBalances(prev=>{
+          const prev2=(prev[hEmp]||[]).filter(r=>r.year!==yr);
+          return {...prev,[hEmp]:[...prev2,rec].sort((a,b)=>a.year-b.year)};
+        });
+        try{
+          await dbUpsert("leave_history",{
+            emp_no:hEmp, year:yr,
+            casual_bal:rec.casual, vacation_bal:rec.vacation,
+            half_pay_bal:rec.halfPay, no_pay_bal:rec.noPay,
+            notes:hNotes,
+            added_by:currentUser?.fullName||"Leave Officer",
+            added_on:today(),
+          });
+        }catch(e){ console.error("hist save:",e); }
+        setHYear(String(yr-1)); setHCasual(""); setHVac(""); setHHalfPay(""); setHNoPay(""); setHNotes("");
+      };
+
+      // ── Generate a full service summary report (for transfer / retirement) ──
+      const genServiceReport = (empNo) => {
+        const emp  = ALL_HIST_STAFF.find(e=>e.empNo===empNo);
+        if(!emp) return "";
+        const recs = (histBalances[empNo]||[]).slice().sort((a,b)=>a.year-b.year);
+        // Also include current year leave records from leaveRecords state
+        const currRecs = (leaveRecords[empNo]||[]);
+        const currYear2 = new Date().getFullYear();
+
+        // Group current records by year
+        const liveByYear = {};
+        currRecs.forEach(r=>{
+          const yr = parseInt((r.from||"").slice(0,4));
+          if(!yr) return;
+          if(!liveByYear[yr]) liveByYear[yr]={casual:0,vacation:0,halfPay:0,noPay:0,duty:0,comp:0};
+          const t=r.type||"";
+          const d=r.days||0;
+          if(r.status==="Approved"||r.status==="LO Recommended"||r.status==="Reg Recommended"){
+            if(t.includes("Casual"))    liveByYear[yr].casual   +=d;
+            else if(t.includes("Vac")||t.includes("Sick")) liveByYear[yr].vacation+=d;
+            else if(t.includes("Half")) liveByYear[yr].halfPay  +=d;
+            else if(t.includes("No Pay")) liveByYear[yr].noPay  +=d;
+            else if(t.includes("Duty"))  liveByYear[yr].duty    +=d;
+            else if(t.includes("Comp"))  liveByYear[yr].comp    +=d;
+          }
+        });
+
+        const acc=getAcc(empNo);
+        const svcYrs = Math.floor((new Date()-new Date(emp.joined))/(365.25*864e5));
+
+        let rows="";
+        recs.forEach(r=>{
+          const live=liveByYear[r.year]||{};
+          rows+=`  ${r.year}  |  C:${r.casual||0}d remaining  |  V/S:${r.vacation||0}d remaining  |  HP:${r.halfPay||0}d taken  |  NP:${r.noPay||0}d taken${r.notes?"  |  Note: "+r.notes:""}\n`;
+        });
+        // Add years with live records not yet in history
+        Object.keys(liveByYear).sort().forEach(yr=>{
+          if(!recs.find(r=>r.year===parseInt(yr))){
+            const live=liveByYear[yr];
+            rows+=`  ${yr}  |  (Current system data) C used:${live.casual}d  V/S used:${live.vacation}d  HP:${live.halfPay}d  NP:${live.noPay}d\n`;
+          }
+        });
+        if(!rows) rows="  No service history recorded yet.\n";
+
+        return [
+          "═".repeat(60),
+          "  SERVICE LEAVE HISTORY REPORT",
+          "  "+today()+" — "+currentUser?.fullName+" (Leave Officer)",
+          "═".repeat(60),
+          "",
+          "  OFFICER DETAILS",
+          "  ─".repeat(30),
+          "  Full Name   : "+emp.fullName,
+          "  Designation : "+emp.designation,
+          "  Section     : "+emp.section,
+          "  Grade       : "+emp.staffGrade,
+          "  NIC         : "+(emp.nic||"—"),
+          "  Joined      : "+emp.joined,
+          "  Service     : ~"+svcYrs+" year(s)",
+          "",
+          "  YEAR-BY-YEAR LEAVE HISTORY",
+          "  ─".repeat(30),
+          "  (C=Casual  V/S=Vacation/Sick  HP=Half Pay  NP=No Pay)",
+          "",
+          rows,
+          "  ACCUMULATED TOTALS (from recorded history)",
+          "  ─".repeat(30),
+          "  Total Casual remaining (carry-forward) : "+acc.casual+" days",
+          "  Total Vacation/Sick remaining           : "+acc.vacation+" days",
+          "  Total Half Pay leave taken              : "+acc.halfPay+" days",
+          "  Total No Pay leave taken                : "+acc.noPay+" days",
+          "",
+          "  CURRENT YEAR LEAVE ("+currYear2+")",
+          "  ─".repeat(30),
+          ...(()=>{
+            const ly=liveByYear[currYear2]||{};
+            return [
+              "  Casual used      : "+(ly.casual||0)+" days",
+              "  Vacation/Sick    : "+(ly.vacation||0)+" days",
+              "  Half Pay         : "+(ly.halfPay||0)+" days",
+              "  No Pay           : "+(ly.noPay||0)+" days",
+              "  Duty Leave       : "+(ly.duty||0)+" days",
+              "  Compensatory     : "+(ly.comp||0)+" days",
+            ];
+          })(),
+          "",
+          "═".repeat(60),
+          "  This report is generated for official use.",
+          "  COT Ratnapura — DTET Sri Lanka",
+          "═".repeat(60),
+        ].join("\n");
+      };
+
+      return (
+        <div>
+          <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>📚 Service Leave History</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+            Record year-by-year leave history for all staff. Generate transfer / retirement summaries.
+          </div>
+
+          {/* Sub-tab switcher */}
+          <div style={{display:"flex",gap:6,marginBottom:14}}>
+            {[{k:"entry",l:"➕ Enter History"},{k:"view",l:"📋 View History"},{k:"report",l:"📄 Service Report"}].map(st=>(
+              <button key={st.k}
+                style={{...s.btn(hSubTab===st.k?"primary":"outline"),padding:"8px 10px",fontSize:12,flex:1}}
+                onClick={()=>setHSubTab(st.k)}>{st.l}</button>
+            ))}
+          </div>
+
+          {/* ══ ENTRY SUB-TAB ══════════════════════════════════════════ */}
+          {hSubTab==="entry"&&<>
+            <div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
+              📌 Enter the <b>remaining balance</b> for Casual &amp; Vacation/Sick leave, and <b>total days taken</b> for Half Pay &amp; No Pay leave — for each year of the officer's service.
+            </div>
+
+            {/* Staff selector */}
+            <label style={s.label}>Staff Member</label>
+            <select style={{...s.select,marginBottom:8}} value={hEmp} onChange={e=>{setHEmp(e.target.value);}}>
+              <option value="">— Select staff member —</option>
+              <optgroup label="── Director / Officers ──">
+                {ALL_HIST_STAFF.filter(e=>Object.keys(FIXED_ROLES).includes(e.empNo)).map(e=>(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName} — {e.designation}</option>
+                ))}
+              </optgroup>
+              <optgroup label="── Academic Staff ──">
+                {ALL_HIST_STAFF.filter(e=>e.section==="Academic"&&!Object.keys(FIXED_ROLES).includes(e.empNo)).map(e=>(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName}</option>
+                ))}
+              </optgroup>
+              <optgroup label="── Non Academic Staff ──">
+                {ALL_HIST_STAFF.filter(e=>e.section==="Non Academic"&&!Object.keys(FIXED_ROLES).includes(e.empNo)).map(e=>(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName}</option>
+                ))}
+              </optgroup>
+            </select>
+
+            {/* Show summary of already entered years */}
+            {hEmp&&(()=>{
+              const emp=ALL_HIST_STAFF.find(e=>e.empNo===hEmp);
+              const recs=histBalances[hEmp]||[];
+              const acc=getAcc(hEmp);
+              return(
+                <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12}}>
+                  <b>{emp?.fullName}</b> · Joined {emp?.joined} · {recs.length} year(s) recorded<br/>
+                  <span style={{color:"#1d4ed8"}}>📋 Casual: {acc.casual}d</span> &nbsp;
+                  <span style={{color:"#15803d"}}>🌴 Vac/Sick: {acc.vacation}d</span> &nbsp;
+                  <span style={{color:"#b45309"}}>🏥 Half Pay: {acc.halfPay}d</span> &nbsp;
+                  <span style={{color:"#6b7280"}}>📌 No Pay: {acc.noPay}d</span>
+                  {recs.length>0&&<div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {recs.map(r=>(
+                      <span key={r.year} style={{background:"#dcfce7",borderRadius:6,padding:"2px 8px",fontSize:11,color:"#166534"}}>{r.year}</span>
+                    ))}
+                  </div>}
+                </div>
+              );
+            })()}
+
+            {/* Year + 4 leave fields */}
+            <label style={s.label}>Year</label>
+            <input type="number" style={{...s.input,marginBottom:8}} value={hYear}
+              onChange={e=>setHYear(e.target.value)} min="1990" max={new Date().getFullYear()} />
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <div>
+                <label style={s.label}>📋 Casual Leave Remaining (days)</label>
+                <input type="number" style={s.input} value={hCasual} min="0" max="42" step="0.5" placeholder="0"
+                  onChange={e=>setHCasual(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Balance remaining at year end</div>
+              </div>
+              <div>
+                <label style={s.label}>🌴 Vacation/Sick Remaining (days)</label>
+                <input type="number" style={s.input} value={hVac} min="0" max="96" step="0.5" placeholder="0"
+                  onChange={e=>setHVac(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Balance — can compensate future excess</div>
+              </div>
+              <div>
+                <label style={s.label}>🏥 Half Pay Leave Taken (days)</label>
+                <input type="number" style={s.input} value={hHalfPay} min="0" step="0.5" placeholder="0"
+                  onChange={e=>setHHalfPay(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Total days taken that year</div>
+              </div>
+              <div>
+                <label style={s.label}>📌 No Pay Leave Taken (days)</label>
+                <input type="number" style={s.input} value={hNoPay} min="0" step="0.5" placeholder="0"
+                  onChange={e=>setHNoPay(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Total days taken that year</div>
+              </div>
+            </div>
+
+            <label style={s.label}>Notes (optional)</label>
+            <input style={{...s.input,marginBottom:12}} value={hNotes} onChange={e=>setHNotes(e.target.value)}
+              placeholder="e.g. Transferred from Matara College with 5d casual balance" />
+
+            <button style={{background:"#1d4ed8",border:"none",borderRadius:10,padding:"13px 0",
+              color:"#fff",fontWeight:700,fontSize:15,width:"100%",cursor:"pointer",marginBottom:8}}
+              onClick={saveYear}>
+              ✅ Save Year {hYear}
+            </button>
+            {hEmp&&(histBalances[hEmp]||[]).length>0&&(
+              <button style={{...s.btn("outline"),width:"100%",padding:"10px 0"}}
+                onClick={()=>setHSubTab("view")}>
+                📋 View All Years for This Staff →
+              </button>
+            )}
+          </>}
+
+          {/* ══ VIEW SUB-TAB ═══════════════════════════════════════════ */}
+          {hSubTab==="view"&&<>
+            <label style={s.label}>Select Staff Member</label>
+            <select style={{...s.select,marginBottom:12}} value={hView} onChange={e=>setHView(e.target.value)}>
+              <option value="">— Select staff member —</option>
+              {ALL_HIST_STAFF.map(e=>{
+                const recs=histBalances[e.empNo]||[];
+                return recs.length>0?(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName} ({recs.length} yr{recs.length>1?"s":""})</option>
+                ):null;
+              }).filter(Boolean)}
+            </select>
+
+            {hView&&(()=>{
+              const emp=ALL_HIST_STAFF.find(e=>e.empNo===hView);
+              const recs=(histBalances[hView]||[]).slice().sort((a,b)=>a.year-b.year);
+              const acc=getAcc(hView);
+              return(<>
+                {/* Summary cards */}
+                <div style={{...s.card,marginBottom:10}}>
+                  <div style={{fontSize:14,fontWeight:700,marginBottom:2}}>{emp?.fullName}</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>{emp?.designation} · Joined {emp?.joined}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:6}}>
+                    <div style={{background:"#eff6ff",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#1d4ed8"}}>{acc.casual}</div>
+                      <div style={{fontSize:10,color:C.muted}}>📋 Casual Remaining</div>
+                    </div>
+                    <div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{acc.vacation}</div>
+                      <div style={{fontSize:10,color:C.muted}}>🌴 Vac/Sick Remaining</div>
+                    </div>
+                    <div style={{background:"#fffbeb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#b45309"}}>{acc.halfPay}</div>
+                      <div style={{fontSize:10,color:C.muted}}>🏥 Half Pay Total</div>
+                    </div>
+                    <div style={{background:"#f9fafb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#6b7280"}}>{acc.noPay}</div>
+                      <div style={{fontSize:10,color:C.muted}}>📌 No Pay Total</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Year by year table */}
+                <div style={{...s.card,padding:0,overflow:"hidden",marginBottom:10}}>
+                  <div style={{background:"#1e3a5f",color:"#fff",padding:"10px 14px",fontSize:12,fontWeight:700}}>
+                    Year-by-Year Breakdown ({recs.length} year{recs.length!==1?"s":""})
+                  </div>
+                  {/* Table header */}
+                  <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr 1fr",gap:0,background:"#f8fafc",borderBottom:"1px solid #e2e8f0",padding:"6px 10px",fontSize:10,fontWeight:700,color:C.muted}}>
+                    <span>Year</span><span style={{textAlign:"center"}}>📋 Casual</span><span style={{textAlign:"center"}}>🌴 Vac/Sick</span><span style={{textAlign:"center"}}>🏥 HP</span><span style={{textAlign:"center"}}>📌 NP</span>
+                  </div>
+                  {recs.map((r,i)=>(
+                    <div key={r.year} style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr 1fr",gap:0,
+                      padding:"8px 10px",borderBottom:"1px solid #f0f4f8",
+                      background:i%2===0?"#fff":"#fafafa",alignItems:"center"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"#1d4ed8"}}>{r.year}</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#1d4ed8"}}>{r.casual||0}d</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#15803d"}}>{r.vacation||0}d</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#b45309"}}>{r.halfPay||0}d</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        {r.noPay||0}d
+                        <button style={{background:"none",border:"none",color:C.danger,cursor:"pointer",fontSize:12,padding:"0 2px"}}
+                          onClick={async()=>{
+                            if(!window.confirm("Delete "+r.year+" record for "+emp.fullName+"?")) return;
+                            setHistBalances(prev=>({...prev,[hView]:prev[hView].filter(x=>x.year!==r.year)}));
+                            try{ await dbGet("leave_history","?emp_no=eq."+hView+"&year=eq."+r.year); }catch(e){}
+                          }}>✕</button>
+                      </span>
+                    </div>
+                  ))}
+                  {recs.length===0&&<div style={{padding:20,textAlign:"center",color:C.muted,fontSize:12}}>No history recorded yet.</div>}
+                </div>
+                {r.notes&&<div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginBottom:6}}>Note: {recs[recs.length-1]?.notes}</div>}
+
+                <button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}}
+                  onClick={()=>{setHSubTab("report");setHView(hView);}}>
+                  📄 Generate Service Report for {emp?.fullName} →
+                </button>
+              </>);
+            })()}
+
+            {!hView&&Object.keys(histBalances).length===0&&(
+              <div style={{...s.card,textAlign:"center",padding:32,color:C.muted}}>
+                <div style={{fontSize:32,marginBottom:8}}>📂</div>
+                <div style={{fontSize:13}}>No history recorded yet.</div>
+                <div style={{fontSize:11,marginTop:4}}>Go to "Enter History" to add year-by-year records.</div>
+              </div>
+            )}
+          </>}
+
+          {/* ══ REPORT SUB-TAB ═════════════════════════════════════════ */}
+          {hSubTab==="report"&&<>
+            <div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
+              📄 Generate a full service leave summary for transfer, retirement, or official records.
+            </div>
+            <label style={s.label}>Select Staff Member</label>
+            <select style={{...s.select,marginBottom:12}} value={hView} onChange={e=>setHView(e.target.value)}>
+              <option value="">— Select staff member —</option>
+              {ALL_HIST_STAFF.map(e=>(
+                <option key={e.empNo} value={e.empNo}>{e.fullName} — {e.designation}</option>
+              ))}
+            </select>
+
+            {hView&&(()=>{
+              const emp=ALL_HIST_STAFF.find(e=>e.empNo===hView);
+              const recs=(histBalances[hView]||[]).slice().sort((a,b)=>a.year-b.year);
+              const acc=getAcc(hView);
+              return(<>
+                {/* Report preview */}
+                <div style={{...s.card,borderLeft:"4px solid #1d4ed8",marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>{emp?.fullName}</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>{emp?.designation} · {emp?.section} · Joined {emp?.joined}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                    <div style={{background:"#eff6ff",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#1d4ed8"}}>{acc.casual}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>Casual Carry-forward</div>
+                    </div>
+                    <div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#15803d"}}>{acc.vacation}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>Vacation/Sick Balance</div>
+                    </div>
+                    <div style={{background:"#fffbeb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#b45309"}}>{acc.halfPay}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>Half Pay (total)</div>
+                    </div>
+                    <div style={{background:"#f9fafb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#6b7280"}}>{acc.noPay}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>No Pay (total)</div>
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>
+                    {recs.length} Year{recs.length!==1?"s":""} on Record
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {recs.map(r=>(
+                      <span key={r.year} style={{background:"#dbeafe",color:"#1d4ed8",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:600}}>{r.year}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Purpose selector */}
+                <label style={s.label}>Report Purpose</label>
+                <select style={{...s.select,marginBottom:12}} id="report-purpose">
+                  <option>Transfer to another institution</option>
+                  <option>Retirement</option>
+                  <option>Resignation</option>
+                  <option>Annual audit</option>
+                  <option>Officer request</option>
+                  <option>Other official purpose</option>
+                </select>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <button style={{background:"#1e3a5f",border:"none",borderRadius:10,padding:"12px 0",
+                    color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}
+                    onClick={()=>{
+                      const purpose=document.getElementById("report-purpose")?.value||"Official purpose";
+                      setModal({title:"Service Report — "+emp.fullName,content:genServiceReport(hView)});
+                    }}>
+                    📄 View Report
+                  </button>
+                  <button style={{background:"#15803d",border:"none",borderRadius:10,padding:"12px 0",
+                    color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}
+                    onClick={()=>{
+                      const purpose=document.getElementById("report-purpose")?.value||"Official purpose";
+                      const report=genServiceReport(hView);
+                      setModal({title:"Service Report — "+emp.fullName+" ("+purpose+")",content:report});
+                    }}>
+                    🖨️ Print Report
+                  </button>
+                </div>
+              </>);
+            })()}
+          </>}
+        </div>
+      );
+    }
+
+
+        if(tab==="register") return(
       <div>
         {/* Manual Leave Entry card */}
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📓 Leave Register (Gen 190)</div>
         {/* ── Historical Leave Balance Entry ── */}
-        <div style={{fontSize:13,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8,marginTop:4}}>📚 Service History — Past Leave Balances</div>
-        <div style={{background:"#fff",border:"2px solid #1d4ed8",borderRadius:14,padding:16,marginBottom:16}}>
-          <div style={{fontSize:12,color:"#1d4ed8",fontWeight:600,marginBottom:10}}>
-            Enter accumulated Casual &amp; Vacation/Sick leave balances from previous years of service for any staff member.
-            These are used to calculate available carry-forward balances.
-          </div>
-          <label style={s.label}>Staff Member</label>
-          <select style={{...s.select,marginBottom:8}} id="hb-emp">
-            <option value="">— Select staff —</option>
-            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
-          </select>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
-            <div><label style={s.label}>Year</label>
-              <input type="number" style={s.input} id="hb-year" min="2000" max={currYear-1} placeholder={String(currYear-1)} /></div>
-            <div><label style={s.label}>Casual Balance</label>
-              <input type="number" style={s.input} id="hb-casual" min="0" max="21" placeholder="0" /></div>
-            <div><label style={s.label}>Vacation/Sick Balance</label>
-              <input type="number" style={s.input} id="hb-vacation" min="0" max="24" placeholder="0" /></div>
-          </div>
-          <label style={s.label}>Notes (optional)</label>
-          <input style={{...s.input,marginBottom:10}} id="hb-notes" placeholder="e.g. Balance carried from service at Matara College" />
-          <button style={{background:"#1d4ed8",border:"none",borderRadius:10,padding:"11px 0",color:"#fff",fontWeight:700,fontSize:14,width:"100%",cursor:"pointer"}} onClick={()=>{
-            const empNo=document.getElementById("hb-emp")?.value;
-            const year=document.getElementById("hb-year")?.value;
-            const casual=parseFloat(document.getElementById("hb-casual")?.value||0);
-            const vacation=parseFloat(document.getElementById("hb-vacation")?.value||0);
-            const notes=document.getElementById("hb-notes")?.value||"";
-            if(!empNo||!year){alert("Please select a staff member and enter the year.");return;}
-            const emp=ALL_STAFF.find(e=>e.empNo===empNo);
-            const rec={year:parseInt(year),casual,vacation,notes,addedBy:currentUser?.fullName||"Leave Officer",addedOn:today()};
-            setHistBalances(prev=>{
-              const existing=(prev[empNo]||[]).filter(r=>r.year!==parseInt(year));
-              return {...prev,[empNo]:[...existing,rec].sort((a,b)=>a.year-b.year)};
-            });
-            alert("Saved: "+emp?.fullName+" — Year "+year+": Casual="+casual+" days, Vacation="+vacation+" days");
-            ["hb-emp","hb-year","hb-casual","hb-vacation","hb-notes"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
-          }}>✅ Save Historical Balance</button>
-          {/* Show existing records */}
-          {Object.keys(histBalances).length>0&&<>
-            <div style={{fontSize:11,color:C.muted,fontWeight:700,marginTop:12,marginBottom:6,textTransform:"uppercase"}}>Saved Records</div>
-            {Object.entries(histBalances).map(([empNo,recs])=>{
-              const emp=ALL_STAFF.find(e=>e.empNo===empNo);
-              return recs.length>0&&(
-                <div key={empNo} style={{borderTop:"1px solid #e2e8f0",paddingTop:8,marginTop:4}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"#1d4ed8",marginBottom:4}}>{emp?.fullName||empNo}</div>
-                  {recs.map((r,i)=>(
-                    <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#334155",padding:"2px 0",borderBottom:"1px solid #f0f4f8"}}>
-                      <span>📅 {r.year}</span>
-                      <span>📋 Casual: <b>{r.casual}</b>d</span>
-                      <span>🌴 Vac/Sick: <b>{r.vacation}</b>d</span>
-                      <button style={{background:"none",border:"none",color:C.danger,cursor:"pointer",fontSize:11}} onClick={()=>setHistBalances(prev=>({...prev,[empNo]:prev[empNo].filter((_,j)=>j!==i)}))}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </>}
-        </div>
         <label style={s.label}>Month</label>
         <input type="month" style={{...s.input,marginBottom:12}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
         {/* ── Manual Leave Entry (Maternity / Half Pay / No Pay) ── */}
