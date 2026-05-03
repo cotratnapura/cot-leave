@@ -1106,102 +1106,110 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
   }
 
   async function sendChat(){
-    if(!chatInput.trim()||chatLoading)return;
-    const msg=chatInput.trim();
+    if(!chatInput.trim()||chatLoading) return;
+    const msg = chatInput.trim();
     setChatInput("");
     setChatMsgs(p=>[...p,{role:"user",text:msg}]);
     setChatLoading(true);
 
-    // Try Groq first, fall back to Gemini
-    const groqKey  = import.meta.env.VITE_GROQ_KEY||"";
-    const geminiKey= import.meta.env.VITE_GEMINI_KEY||"";
+    const geminiKey = import.meta.env.VITE_GEMINI_KEY||"";
+    const groqKey   = import.meta.env.VITE_GROQ_KEY||"";
 
-    if(!groqKey && !geminiKey){
+    if(!geminiKey && !groqKey){
       setChatMsgs(p=>[...p,{role:"assistant",text:
-        "⚠️ AI bot not configured.\n\n"+
-        "OPTION A — Groq (free, fast):\n"+
-        "  1. console.groq.com → Sign up → API Keys → Create\n"+
-        "  2. Vercel → Settings → Env Vars → Add VITE_GROQ_KEY = gsk_...\n\n"+
-        "OPTION B — Google Gemini (free, no card):\n"+
-        "  1. aistudio.google.com → Get API Key\n"+
-        "  2. Vercel → Settings → Env Vars → Add VITE_GEMINI_KEY = AIza...\n\n"+
-        "  Then Redeploy."
+        "⚠️ AI not set up. Do this once:\n\n"+
+        "1. Go to aistudio.google.com\n"+
+        "2. Click Get API Key → Create API Key\n"+
+        "3. Copy the key (starts with AIza...)\n"+
+        "4. Go to vercel.com → cot-leave project\n"+
+        "5. Settings → Environment Variables → Add New:\n"+
+        "   Name: VITE_GEMINI_KEY\n"+
+        "   Value: AIza... (paste your key)\n"+
+        "6. Save → Deployments → Redeploy\n\n"+
+        "Google AI Studio is 100% free — no credit card needed."
       }]);
-      setChatLoading(false);return;
+      setChatLoading(false); return;
     }
 
-    const balStr=myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
-    const sysPrompt=
-      "You are the official Leave Management Assistant for College of Technology Ratnapura (COT Ratnapura), "+
-      "under DTET Sri Lanka. Answer questions about leave rules, balances, and procedures accurately. "+
-      "KEY RULES: "+
-      "Casual Leave: 21 days/year for officers; 0 in first year then 21/yr for juniors; max 6 days at once. "+
-      "Vacation/Sick Leave: 24 days/year for ALL confirmed officers and staff. Medical certificate required within 3 working days for sick leave. "+
-      "Compensatory Leave: earned by working on weekends/public holidays; expires after 1 year. "+
-      "Duty Leave: for official duties outside institute; Director must approve before the date; attach official letter. "+
-      "No Pay Leave: applied automatically by Department when Vacation/Sick is exceeded — not self-applied. "+
-      "Half Pay & Maternity Leave (84 days): recorded by Leave Officer only. "+
-      "Short Leave: 2 per month. AM 8:30-10:00; PM officer 14:45-16:15 / junior 15:00-16:15. "+
-      "Late arrival: up to 09:00 = minor late (2 forgiven/month); after 09:00 = stay until 16:45. "+
-      "Approval — Academic: Director approves directly. Non-Academic: LO recommends → Registrar recommends → Director approves. "+
-      "Director own leave: must inform DG the day before (DTET/04/PF/01/15). "+
-      (currentUser?"Current user: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+". ":"")+
+    const balStr = myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
+    const sysPrompt =
+      "You are the official Leave Management Assistant for College of Technology (COT) Ratnapura, DTET Sri Lanka. "+
+      "Answer questions about leave rules, balances, and procedures. "+
+      "RULES: Casual Leave=21d/yr (officers), 0 first yr then 21 (junior). "+
+      "Vacation/Sick=24d/yr all confirmed officers including Director/Registrar/LO/ICT. "+
+      "Medical cert required within 3 working days for sick leave. "+
+      "Compensatory=earned by working weekends/holidays, expires 1 yr. "+
+      "Duty Leave=official duties outside institute, Director approves before date, attach letter. "+
+      "No Pay=auto by dept when vacation exceeded. Half Pay & Maternity(84d)=LO records only. "+
+      "Short Leave=2/month. Late after 9am=stay till 16:45. "+
+      "Academic: Director approves direct. Non-Academic: LO→Registrar→Director. "+
+      "Director own leave: inform DG day before (DTET/04/PF/01/15). "+
+      (currentUser?"User: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+". ":"")+
       (myBalances.length?"Balances: "+balStr+". ":"")+
-      "Respond in the same language (English or Sinhala). Be concise.";
+      "Reply in same language as question (English or Sinhala). Be brief and accurate.";
 
-    const history=chatMsgs.slice(-6).map(m=>({
-      role:m.role==="user"?"user":"assistant",
-      content:m.text
+    const history = chatMsgs.slice(-6).map(m=>({
+      role: m.role==="user"?"user":"model",
+      parts:[{text:m.text}]
     }));
 
-    // Try Groq
+    // Try Gemini first (most reliable, free)
+    if(geminiKey){
+      try{
+        const r = await fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+geminiKey,
+          {method:"POST", headers:{"Content-Type":"application/json"},
+           body:JSON.stringify({
+             system_instruction:{parts:[{text:sysPrompt}]},
+             contents:[...history,{role:"user",parts:[{text:msg}]}],
+             generationConfig:{maxOutputTokens:500,temperature:0.3}
+           })}
+        );
+        const d = await r.json();
+        if(r.ok){
+          const reply = d?.candidates?.[0]?.content?.parts?.[0]?.text||"";
+          if(reply){ setChatMsgs(p=>[...p,{role:"assistant",text:reply.trim()}]); setChatLoading(false); return; }
+        }
+        // Show actual error message
+        const errMsg = d?.error?.message||"Unknown error";
+        console.error("Gemini error:",errMsg);
+        // If key invalid, tell user clearly
+        if(d?.error?.code===400||d?.error?.code===401||d?.error?.code===403){
+          setChatMsgs(p=>[...p,{role:"assistant",text:
+            "❌ Gemini API key error: "+errMsg+"\n\n"+
+            "Please check your VITE_GEMINI_KEY in Vercel environment variables and redeploy."
+          }]);
+          setChatLoading(false); return;
+        }
+      }catch(e){ console.error("Gemini fetch error:",e.message); }
+    }
+
+    // Try Groq fallback
     if(groqKey){
       try{
-        const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+        const msgs2 = chatMsgs.slice(-6).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text}));
+        const r2 = await fetch("https://api.groq.com/openai/v1/chat/completions",{
           method:"POST",
           headers:{"Content-Type":"application/json","Authorization":"Bearer "+groqKey},
           body:JSON.stringify({
             model:"llama3-8b-8192",
-            messages:[{role:"system",content:sysPrompt},...history,{role:"user",content:msg}],
-            max_tokens:500,temperature:0.3
+            messages:[{role:"system",content:sysPrompt},...msgs2,{role:"user",content:msg}],
+            max_tokens:500, temperature:0.3
           })
         });
-        const data=await res.json();
-        if(res.ok&&data?.choices?.[0]?.message?.content){
-          setChatMsgs(p=>[...p,{role:"assistant",text:data.choices[0].message.content.trim()}]);
-          setChatLoading(false);return;
+        const d2 = await r2.json();
+        if(r2.ok){
+          const reply2 = d2?.choices?.[0]?.message?.content||"";
+          if(reply2){ setChatMsgs(p=>[...p,{role:"assistant",text:reply2.trim()}]); setChatLoading(false); return; }
         }
-        console.warn("Groq error:",data?.error?.message);
-      }catch(e){ console.warn("Groq failed:",e.message); }
-    }
-
-    // Fall back to Gemini
-    if(geminiKey){
-      try{
-        const gemHistory=chatMsgs.slice(-6).map(m=>({
-          role:m.role==="user"?"user":"model",
-          parts:[{text:m.text}]
-        }));
-        const res2=await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-          {method:"POST",headers:{"Content-Type":"application/json"},
-           body:JSON.stringify({
-             system_instruction:{parts:[{text:sysPrompt}]},
-             contents:[...gemHistory,{role:"user",parts:[{text:msg}]}],
-             generationConfig:{maxOutputTokens:500,temperature:0.3}
-           })}
-        );
-        const data2=await res2.json();
-        if(res2.ok&&data2?.candidates?.[0]?.content?.parts?.[0]?.text){
-          setChatMsgs(p=>[...p,{role:"assistant",text:data2.candidates[0].content.parts[0].text.trim()}]);
-          setChatLoading(false);return;
-        }
-        console.warn("Gemini error:",data2?.error?.message);
-      }catch(e){ console.warn("Gemini failed:",e.message); }
+        console.error("Groq error:",d2?.error?.message);
+      }catch(e){ console.error("Groq error:",e.message); }
     }
 
     setChatMsgs(p=>[...p,{role:"assistant",text:
-      "❌ Could not get a response. Please check your API key in Vercel environment variables and redeploy."}]);
+      "❌ Could not get a response.\n"+
+      "Make sure VITE_GEMINI_KEY is set in Vercel → Settings → Environment Variables, then Redeploy."
+    }]);
     setChatLoading(false);
   }
 
@@ -1742,7 +1750,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
           <div style={{fontSize:16,fontWeight:700}}>{t("🤖 AI Leave Assistant","🤖 AI නිවාඩු සහාය")}</div>
           <div style={{fontSize:10,background:"#f0fdf4",color:"#166534",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontWeight:600}}>
-            🆓 Llama 3 · Free
+            🆓 Gemini · Free
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:10}}>
