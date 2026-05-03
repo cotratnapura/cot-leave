@@ -528,6 +528,16 @@ export default function App() {
   const [dutyLetterFile,setDutyLetterFile]=useState(null);
   const [dutyLetterName,setDutyLetterName]=useState("");
   const [histBalances,setHistBalances]=useState({}); // {empNo: [{year,casual,vacation,notes}]}
+  // History tab states (must be at top level — not inside conditional)
+  const [hEmp,setHEmp]         = useState("");
+  const [hYear,setHYear]       = useState(String(new Date().getFullYear()-1));
+  const [hCasual,setHCasual]   = useState("");
+  const [hVac,setHVac]         = useState("");
+  const [hHalfPay,setHHalfPay] = useState("");
+  const [hNoPay,setHNoPay]     = useState("");
+  const [hNotes,setHNotes]     = useState("");
+  const [hView,setHView]       = useState("");
+  const [hSubTab,setHSubTab]   = useState("entry");
   const [xlsxLog,setXlsxLog]=useState([]);
   useEffect(()=>{ chatEnd.current?.scrollIntoView({behavior:"smooth"}); },[chatMsgs]);
 
@@ -1102,17 +1112,20 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     setChatMsgs(p=>[...p,{role:"user",text:msg}]);
     setChatLoading(true);
 
-    const apiKey=import.meta.env.VITE_GROQ_KEY||"";
-    if(!apiKey){
+    // Try Groq first, fall back to Gemini
+    const groqKey  = import.meta.env.VITE_GROQ_KEY||"";
+    const geminiKey= import.meta.env.VITE_GEMINI_KEY||"";
+
+    if(!groqKey && !geminiKey){
       setChatMsgs(p=>[...p,{role:"assistant",text:
-        "⚠️ AI bot not configured yet.\n\n"+
-        "To enable FREE AI (Llama 3, instant responses):\n"+
-        "1. Go to console.groq.com → Sign up free\n"+
-        "2. Click API Keys → Create API Key\n"+
-        "3. Vercel → project → Settings → Environment Variables\n"+
-        "4. Add: VITE_GROQ_KEY = gsk_...\n"+
-        "5. Redeploy\n\n"+
-        "100% free — no credit card. Instant responses (no loading wait)."
+        "⚠️ AI bot not configured.\n\n"+
+        "OPTION A — Groq (free, fast):\n"+
+        "  1. console.groq.com → Sign up → API Keys → Create\n"+
+        "  2. Vercel → Settings → Env Vars → Add VITE_GROQ_KEY = gsk_...\n\n"+
+        "OPTION B — Google Gemini (free, no card):\n"+
+        "  1. aistudio.google.com → Get API Key\n"+
+        "  2. Vercel → Settings → Env Vars → Add VITE_GEMINI_KEY = AIza...\n\n"+
+        "  Then Redeploy."
       }]);
       setChatLoading(false);return;
     }
@@ -1120,58 +1133,75 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     const balStr=myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
     const sysPrompt=
       "You are the official Leave Management Assistant for College of Technology Ratnapura (COT Ratnapura), "+
-      "under DTET Sri Lanka. Answer questions about leave rules accurately and concisely. "+
+      "under DTET Sri Lanka. Answer questions about leave rules, balances, and procedures accurately. "+
       "KEY RULES: "+
-      "Casual Leave: 21 days/year for officers; 0 in first year then 21/yr for junior staff; max 6 days at once. "+
-      "Vacation/Sick Leave: 24 days/year for ALL officers (Director, Registrar, Leave Officer, ICT Officer) and confirmed staff. "+
-      "Compensatory Leave: earned by working on weekends/public holidays; valid 1 year; half-day possible. "+
-      "Duty Leave: for official duties outside institute; Director must approve before date; attach official letter. "+
-      "No Pay Leave: applied automatically by Department when Vacation/Sick leave exceeded — not self-applied. "+
-      "Half Pay Leave & Maternity Leave (84 days): recorded by Leave Officer only — not self-applied. "+
-      "Short Leave: 2 per month; AM 8:30-10:00; PM officer 14:45-16:15 / junior 15:00-16:15. "+
-      "Late arrival rules: arrive by 09:00 = minor late (2 forgiven per month); after 09:00 = must stay until 16:45. "+
-      "Approval workflow: Academic staff — Director approves directly. "+
-      "Non-Academic: Leave Officer recommends → Registrar recommends → Director approves. "+
-      "Director own leave: must inform Director General (DG) the day before (DTET/04/PF/01/15). "+
-      "Gen 125a: official leave form; acting officer must be named. "+
-      "Gen 190: monthly leave register (managed by Leave Officer). "+
-      (currentUser
-        ? "Current user: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+
-          ", grade: "+currentUser.staffGrade+", joined: "+currentUser.joined+". "
-        : "")+
-      (myBalances.length ? "Their leave balances: "+balStr+". " : "")+
-      "Respond in the same language as the question (English or Sinhala). Be concise and helpful.";
+      "Casual Leave: 21 days/year for officers; 0 in first year then 21/yr for juniors; max 6 days at once. "+
+      "Vacation/Sick Leave: 24 days/year for ALL confirmed officers and staff. Medical certificate required within 3 working days for sick leave. "+
+      "Compensatory Leave: earned by working on weekends/public holidays; expires after 1 year. "+
+      "Duty Leave: for official duties outside institute; Director must approve before the date; attach official letter. "+
+      "No Pay Leave: applied automatically by Department when Vacation/Sick is exceeded — not self-applied. "+
+      "Half Pay & Maternity Leave (84 days): recorded by Leave Officer only. "+
+      "Short Leave: 2 per month. AM 8:30-10:00; PM officer 14:45-16:15 / junior 15:00-16:15. "+
+      "Late arrival: up to 09:00 = minor late (2 forgiven/month); after 09:00 = stay until 16:45. "+
+      "Approval — Academic: Director approves directly. Non-Academic: LO recommends → Registrar recommends → Director approves. "+
+      "Director own leave: must inform DG the day before (DTET/04/PF/01/15). "+
+      (currentUser?"Current user: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+". ":"")+
+      (myBalances.length?"Balances: "+balStr+". ":"")+
+      "Respond in the same language (English or Sinhala). Be concise.";
 
     const history=chatMsgs.slice(-6).map(m=>({
       role:m.role==="user"?"user":"assistant",
       content:m.text
     }));
 
-    try{
-      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "Authorization":"Bearer "+apiKey
-        },
-        body:JSON.stringify({
-          model:"llama3-8b-8192",
-          messages:[{role:"system",content:sysPrompt},...history,{role:"user",content:msg}],
-          max_tokens:500,
-          temperature:0.3
-        })
-      });
-      const data=await res.json();
-      if(!res.ok){
-        const err=data?.error?.message||"API error";
-        setChatMsgs(p=>[...p,{role:"assistant",text:"❌ "+err}]);
-      } else {
-        const reply=data?.choices?.[0]?.message?.content||"No response.";
-        setChatMsgs(p=>[...p,{role:"assistant",text:reply.trim()}]);
-      }
-    }catch(e){
-      setChatMsgs(p=>[...p,{role:"assistant",text:"Connection error. Please check your internet and try again."}]);
+    // Try Groq
+    if(groqKey){
+      try{
+        const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","Authorization":"Bearer "+groqKey},
+          body:JSON.stringify({
+            model:"llama3-8b-8192",
+            messages:[{role:"system",content:sysPrompt},...history,{role:"user",content:msg}],
+            max_tokens:500,temperature:0.3
+          })
+        });
+        const data=await res.json();
+        if(res.ok&&data?.choices?.[0]?.message?.content){
+          setChatMsgs(p=>[...p,{role:"assistant",text:data.choices[0].message.content.trim()}]);
+          setChatLoading(false);return;
+        }
+        console.warn("Groq error:",data?.error?.message);
+      }catch(e){ console.warn("Groq failed:",e.message); }
     }
+
+    // Fall back to Gemini
+    if(geminiKey){
+      try{
+        const gemHistory=chatMsgs.slice(-6).map(m=>({
+          role:m.role==="user"?"user":"model",
+          parts:[{text:m.text}]
+        }));
+        const res2=await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          {method:"POST",headers:{"Content-Type":"application/json"},
+           body:JSON.stringify({
+             system_instruction:{parts:[{text:sysPrompt}]},
+             contents:[...gemHistory,{role:"user",parts:[{text:msg}]}],
+             generationConfig:{maxOutputTokens:500,temperature:0.3}
+           })}
+        );
+        const data2=await res2.json();
+        if(res2.ok&&data2?.candidates?.[0]?.content?.parts?.[0]?.text){
+          setChatMsgs(p=>[...p,{role:"assistant",text:data2.candidates[0].content.parts[0].text.trim()}]);
+          setChatLoading(false);return;
+        }
+        console.warn("Gemini error:",data2?.error?.message);
+      }catch(e){ console.warn("Gemini failed:",e.message); }
+    }
+
+    setChatMsgs(p=>[...p,{role:"assistant",text:
+      "❌ Could not get a response. Please check your API key in Vercel environment variables and redeploy."}]);
     setChatLoading(false);
   }
 
@@ -1775,15 +1805,6 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
 
     // ── HISTORY TAB — Full Service Leave History per Staff Member ──────────────
     if(tab==="history") {
-      const [hEmp,setHEmp]         = useState("");
-      const [hYear,setHYear]       = useState(String(new Date().getFullYear()-1));
-      const [hCasual,setHCasual]   = useState("");
-      const [hVac,setHVac]         = useState("");
-      const [hHalfPay,setHHalfPay] = useState("");
-      const [hNoPay,setHNoPay]     = useState("");
-      const [hNotes,setHNotes]     = useState("");
-      const [hView,setHView]       = useState("");
-      const [hSubTab,setHSubTab]   = useState("entry"); // entry | view | report
 
       // ── All staff including fixed roles ──────────────────────────────
       const ALL_HIST_STAFF = ALL_STAFF; // already includes director/registrar/ict
