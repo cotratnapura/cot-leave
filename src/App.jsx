@@ -1217,7 +1217,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           "Authorization": "Bearer "+key
         },
         body: JSON.stringify({
-          model: "llama3-8b-8192",
+          model: "llama-3.1-8b-instant",
           messages: messages,
           max_tokens: 512,
           temperature: 0.4
