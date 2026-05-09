@@ -67,7 +67,7 @@ const STAFF = [
   {empNo:"21811",  title:"Ms", initials:"G. N.",             lastName:"Jayathilaka",    fullName:"G. N. Jayathilaka",            dob:"1987-09-27", nic:"877711706V",   gender:"Female", joined:"2020-05-19", section:"Non Academic", designation:"Development Officer",       basicSalary:49469,  staffGrade:"officer"},
   {empNo:"23011",  title:"Ms", initials:"G. A. G. C.",       lastName:"Dilanka",        fullName:"G. A. G. C. Dilanka",          dob:"1994-08-04", nic:"199471703162", gender:"Female", joined:"2021-04-01", section:"Non Academic", designation:"ICT Assistant",             basicSalary:0,      staffGrade:"officer"},
   {empNo:"22981",  title:"Ms", initials:"O. R. C.",          lastName:"Udayangani",     fullName:"O. R. C. Udayangani",          dob:"1993-11-03", nic:"938080011V",   gender:"Female", joined:"2019-07-03", section:"Non Academic", designation:"ICT Assistant",             basicSalary:45781,  staffGrade:"officer"},
-  {empNo:"23921",  title:"Ms", initials:"P. G. P.",          lastName:"Ruvini",         fullName:"P. G. P. Ruvini",              dob:"1978-06-17", nic:"786690285V",   gender:"Female", joined:"2017-01-02", section:"Non Academic", designation:"Receptionist",              basicSalary:48946,  staffGrade:"officer"},
+  {empNo:"23921",  title:"Ms", initials:"P. G. P.",          lastName:"Ruvini",         fullName:"P. G. P. Ruvini",              dob:"1978-06-17", nic:"786690285V",   gender:"Female", joined:"2017-01-02", section:"Non Academic", designation:"Receptionist",              basicSalary:48946,  staffGrade:"junior"},
   {empNo:"25147",  title:"Ms", initials:"W.",                lastName:"Karunawathi",    fullName:"W. Karunawathi",               dob:"1966-03-30", nic:"665902234V",   gender:"Female", joined:"1999-11-01", section:"Non Academic", designation:"Office Employee Service",    basicSalary:50353,  staffGrade:"junior"},
   {empNo:"25238",  title:"Mr", initials:"S. R. A. C.",       lastName:"Ruwankumara",    fullName:"S. R. A. C. Ruwankumara",      dob:"1976-06-12", nic:"761641018V",   gender:"Male",   joined:"2019-04-01", section:"Non Academic", designation:"Office Employee Service",    basicSalary:47533,  staffGrade:"junior"},
   {empNo:"24725",  title:"Mr", initials:"S. S.",             lastName:"Jayarathna",     fullName:"S. Sumith Jayarathna",         dob:"1970-07-22", nic:"702042232V",   gender:"Male",   joined:"2002-06-03", section:"Non Academic", designation:"Driver",                    basicSalary:50797,  staffGrade:"junior"},
@@ -115,7 +115,9 @@ function getEntitlement(emp, year) {
   const joined = new Date(emp.joined);
   const yearStart = new Date(year, 0, 1);
   const yearEnd   = new Date(year, 11, 31);
-  const isJunior  = emp.staffGrade === "junior";
+  const isJunior  = emp.staffGrade === "junior" ||
+    ["Receptionist","Office Employee Service","Driver",
+     "Lab Assistant","Field Assistant","Watcher"].includes(emp.designation);
   const svcMonths = Math.floor((new Date() - joined) / (30.44 * 864e5));
   const svcYearsAtYearStart = (yearStart - joined) / (365.25 * 864e5);
 
@@ -198,21 +200,51 @@ function medCertOverdue(emp, leaveRecords) {
 
 // ═══════════════════════════════════════════════════════════════
 // TIME & SHORT LEAVE RULES
-// Office hours:   08:30 – 16:15
-// Short leave morning:  08:30 – 10:00 (all staff)
-// Short leave evening:  14:45 – 16:15 (officers) / 15:00 – 16:15 (junior)
-// Short leave quota: 2 per month (both officer and junior)
-// Late rule 1: arrive ≤09:00 → "minor late" — every 2 = forgiven, no cover
-// Late rule 2: arrive >09:00 → must stay until 16:45 to cover
+// ─────────────────────────────────────────────────────────────
+// JUNIOR STAFF (Office Employee, Driver, Lab/Field Assistant, Watcher):
+//   Report by 08:00  |  Leave 16:45 (with duties) or 16:15 (without)
+//   Arrive 08:01–08:15 → Minor Late → cover until 17:00
+//   Arrive > 08:15   → Late → must stay until 17:00
+//
+// OFFICERS (Lecturers, Instructors, MSO, Dev Officer, ICT, LO, Registrar, Director):
+//   Report by 08:30  |  Leave 16:15
+//   Arrive < 08:15   → Early arrival → may leave at 16:00
+//   Arrive 08:31–09:00 → Minor Late → cover until 16:45
+//   Arrive > 09:00   → Late → must stay until 16:45
 // ═══════════════════════════════════════════════════════════════
-const OFFICE_START  = "08:30";
-const OFFICE_END    = "16:15";
-const LATE_GRACE    = "09:00"; // lates up to here = minor (2 forgiven)
-const COVER_END     = "16:45"; // must stay until if late >09:00
+
+// Officer time constants
+const OFFICER_START     = "08:30";
+const OFFICER_END       = "16:15";
+const OFFICER_EARLY_BY  = "08:15"; // arrive before → may leave at 16:00
+const OFFICER_EARLY_END = "16:00";
+const OFFICER_LATE_GRACE= "09:00";
+const OFFICER_COVER_END = "16:45";
+
+// Junior time constants
+const JUNIOR_START      = "08:00";
+const JUNIOR_END        = "16:45"; // with special duties
+const JUNIOR_END_NORMAL = "16:15"; // without special duties
+const JUNIOR_LATE_GRACE = "08:15";
+const JUNIOR_COVER_END  = "17:00";
+
+// Minor staff designations (report 08:00, cover until 17:00)
+const JUNIOR_DESIGNATIONS = [
+  "Receptionist", "Office Employee Service", "Driver",
+  "Lab Assistant", "Field Assistant", "Watcher"
+];
+
+// Legacy aliases
+const OFFICE_START  = OFFICER_START;
+const OFFICE_END    = OFFICER_END;
+const LATE_GRACE    = OFFICER_LATE_GRACE;
+const COVER_END     = OFFICER_COVER_END;
+
+// Short leave windows
 const SHORT_LEAVE_MORNING_START = "08:30";
 const SHORT_LEAVE_MORNING_END   = "10:00";
-const SHORT_LEAVE_EVE_OFFICER   = "14:45"; // officer evening short leave start
-const SHORT_LEAVE_EVE_JUNIOR    = "15:00"; // junior evening short leave start
+const SHORT_LEAVE_EVE_OFFICER   = "14:45";
+const SHORT_LEAVE_EVE_JUNIOR    = "15:00";
 const SHORT_LEAVE_EVE_END       = "16:15";
 const SHORT_LEAVE_PER_MONTH     = 2;
 
@@ -222,15 +254,36 @@ function timeCmp(a, b) { // returns -1 0 1
 }
 function timeToMins(t){ const [h,m]=t.split(":").map(Number); return h*60+m; }
 
-// Classify a scan-in time for a staff member
+// Classify a scan-in time — different rules for junior vs officer
 function classifyScanIn(scanTime, emp) {
   if(!scanTime) return {status:"absent", late:false, minorLate:false, coverUntil:null};
-  if(timeCmp(scanTime, OFFICE_START)<=0)
-    return {status:"present", late:false, minorLate:false, coverUntil:null};
-  if(timeCmp(scanTime, LATE_GRACE)<=0)
-    return {status:"minor_late", late:true, minorLate:true, coverUntil:null, scanTime};
-  // Late after 09:00 — must cover
-  return {status:"late", late:true, minorLate:false, coverUntil:COVER_END, scanTime};
+  const isJunior = emp?.staffGrade==="junior" ||
+    JUNIOR_DESIGNATIONS.includes(emp?.designation);
+
+  if(isJunior){
+    // Junior: report by 08:00
+    // Arrive ≤ 08:00 → Present (leave at 16:45 with duties / 16:15 without)
+    // Arrive 08:01–08:15 → Minor Late (cover until 17:00)
+    // Arrive > 08:15 → Late (must stay until 17:00)
+    if(timeCmp(scanTime, JUNIOR_START)<=0)
+      return {status:"present", late:false, minorLate:false, coverUntil:null, leaveBy:JUNIOR_END};
+    if(timeCmp(scanTime, JUNIOR_LATE_GRACE)<=0)
+      return {status:"minor_late", late:true, minorLate:true, coverUntil:JUNIOR_COVER_END, scanTime, leaveBy:JUNIOR_COVER_END};
+    return {status:"late", late:true, minorLate:false, coverUntil:JUNIOR_COVER_END, scanTime, leaveBy:JUNIOR_COVER_END};
+  } else {
+    // Officer: report by 08:30
+    // Arrive < 08:15 → Early — may leave at 16:00
+    // Arrive 08:15–08:30 → Present (leave at 16:15)
+    // Arrive 08:31–09:00 → Minor Late (cover until 16:45)
+    // Arrive > 09:00 → Late (must stay until 16:45)
+    if(timeCmp(scanTime, OFFICER_EARLY_BY)<0)
+      return {status:"present", late:false, minorLate:false, coverUntil:null, leaveBy:OFFICER_EARLY_END, earlyArrival:true};
+    if(timeCmp(scanTime, OFFICER_START)<=0)
+      return {status:"present", late:false, minorLate:false, coverUntil:null, leaveBy:OFFICER_END};
+    if(timeCmp(scanTime, OFFICER_LATE_GRACE)<=0)
+      return {status:"minor_late", late:true, minorLate:true, coverUntil:OFFICER_COVER_END, scanTime, leaveBy:OFFICER_COVER_END};
+    return {status:"late", late:true, minorLate:false, coverUntil:OFFICER_COVER_END, scanTime, leaveBy:OFFICER_COVER_END};
+  }
 }
 
 // Determine if a short leave is valid for this staff member & type
@@ -1112,104 +1165,81 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
     setChatMsgs(p=>[...p,{role:"user",text:msg}]);
     setChatLoading(true);
 
-    const geminiKey = import.meta.env.VITE_GEMINI_KEY||"";
-    const groqKey   = import.meta.env.VITE_GROQ_KEY||"";
+    const key = import.meta.env.VITE_GROQ_KEY||"";
 
-    if(!geminiKey && !groqKey){
+    if(!key){
       setChatMsgs(p=>[...p,{role:"assistant",text:
-        "⚠️ AI not set up. Do this once:\n\n"+
-        "1. Go to aistudio.google.com\n"+
-        "2. Click Get API Key → Create API Key\n"+
-        "3. Copy the key (starts with AIza...)\n"+
-        "4. Go to vercel.com → cot-leave project\n"+
-        "5. Settings → Environment Variables → Add New:\n"+
-        "   Name: VITE_GEMINI_KEY\n"+
-        "   Value: AIza... (paste your key)\n"+
-        "6. Save → Deployments → Redeploy\n\n"+
-        "Google AI Studio is 100% free — no credit card needed."
+        "⚠️ AI bot not configured.\n\n"+
+        "Get a FREE Groq key (30 seconds):\n"+
+        "1. Go to: console.groq.com\n"+
+        "2. Sign up with Google (free)\n"+
+        "3. Click API Keys → Create API Key\n"+
+        "4. Copy the key (starts with gsk_)\n"+
+        "5. Vercel → cot-leave → Environment Variables\n"+
+        "6. Add: VITE_GROQ_KEY = gsk_...\n"+
+        "7. Save → Redeploy"
       }]);
-      setChatLoading(false); return;
+      setChatLoading(false);
+      return;
     }
 
-    const balStr = myBalances.map(b=>`${b.type}: ${b.balance} left`).join("; ");
-    const sysPrompt =
-      "You are the official Leave Management Assistant for College of Technology (COT) Ratnapura, DTET Sri Lanka. "+
-      "Answer questions about leave rules, balances, and procedures. "+
-      "RULES: Casual Leave=21d/yr (officers), 0 first yr then 21 (junior). "+
-      "Vacation/Sick=24d/yr all confirmed officers including Director/Registrar/LO/ICT. "+
-      "Medical cert required within 3 working days for sick leave. "+
-      "Compensatory=earned by working weekends/holidays, expires 1 yr. "+
-      "Duty Leave=official duties outside institute, Director approves before date, attach letter. "+
-      "No Pay=auto by dept when vacation exceeded. Half Pay & Maternity(84d)=LO records only. "+
-      "Short Leave=2/month. Late after 9am=stay till 16:45. "+
-      "Academic: Director approves direct. Non-Academic: LO→Registrar→Director. "+
-      "Director own leave: inform DG day before (DTET/04/PF/01/15). "+
-      (currentUser?"User: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+". ":"")+
-      (myBalances.length?"Balances: "+balStr+". ":"")+
-      "Reply in same language as question (English or Sinhala). Be brief and accurate.";
+    const sysPrompt = "You are the Leave Management Assistant for College of Technology Ratnapura (COT Ratnapura), DTET Sri Lanka. "+
+      "Answer leave rule questions accurately and concisely. "+
+      "Rules: Casual Leave=21 days/year (officers), junior staff get 0 in first year then 21/year. "+
+      "Vacation/Sick Leave=24 days/year for all confirmed officers including Director, Registrar, Leave Officer, ICT Officer. "+
+      "Medical certificate required within 3 working days for sick leave. "+
+      "Compensatory Leave=earned by working on weekends or public holidays, expires after 1 year. "+
+      "Duty Leave=for official duties outside institute, Director must approve before date, attach official letter. "+
+      "No Pay Leave=automatically applied by department when Vacation/Sick exceeded, staff do not apply for it. "+
+      "Half Pay Leave and Maternity Leave (84 days) are recorded by Leave Officer only, staff do not apply. "+
+      "Short Leave=2 per month maximum. "+
+      "Late after 9am means must stay until 16:45. "+
+      "Academic staff: Director approves directly. Non-Academic: Leave Officer recommends then Registrar recommends then Director approves. "+
+      "Director own leave: must inform Director General the day before. "+
+      (currentUser ? "Current user: "+currentUser.fullName+" ("+userRole+"), "+currentUser.designation+". " : "")+
+      (myBalances.length ? "Their balances: "+myBalances.map(b=>b.type+": "+b.balance+" days left").join(", ")+". " : "")+
+      "Reply in the same language the user writes in (English or Sinhala). Be brief and helpful.";
 
-    const history = chatMsgs.slice(-6).map(m=>({
-      role: m.role==="user"?"user":"model",
-      parts:[{text:m.text}]
-    }));
+    const messages = [
+      {role:"system", content:sysPrompt},
+      ...chatMsgs.slice(-6).map(m=>({
+        role: m.role==="user" ? "user" : "assistant",
+        content: m.text
+      })),
+      {role:"user", content:msg}
+    ];
 
-    // Try Gemini first (most reliable, free)
-    if(geminiKey){
-      try{
-        const r = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+geminiKey,
-          {method:"POST", headers:{"Content-Type":"application/json"},
-           body:JSON.stringify({
-             system_instruction:{parts:[{text:sysPrompt}]},
-             contents:[...history,{role:"user",parts:[{text:msg}]}],
-             generationConfig:{maxOutputTokens:500,temperature:0.3}
-           })}
-        );
-        const d = await r.json();
-        if(r.ok){
-          const reply = d?.candidates?.[0]?.content?.parts?.[0]?.text||"";
-          if(reply){ setChatMsgs(p=>[...p,{role:"assistant",text:reply.trim()}]); setChatLoading(false); return; }
-        }
-        // Show actual error message
-        const errMsg = d?.error?.message||"Unknown error";
-        console.error("Gemini error:",errMsg);
-        // If key invalid, tell user clearly
-        if(d?.error?.code===400||d?.error?.code===401||d?.error?.code===403){
-          setChatMsgs(p=>[...p,{role:"assistant",text:
-            "❌ Gemini API key error: "+errMsg+"\n\n"+
-            "Please check your VITE_GEMINI_KEY in Vercel environment variables and redeploy."
-          }]);
-          setChatLoading(false); return;
-        }
-      }catch(e){ console.error("Gemini fetch error:",e.message); }
+    try{
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer "+key
+        },
+        body: JSON.stringify({
+          model: "llama3-8b-8192",
+          messages: messages,
+          max_tokens: 512,
+          temperature: 0.4
+        })
+      });
+
+      const data = await response.json();
+
+      if(!response.ok){
+        const err = data?.error?.message || ("HTTP "+response.status);
+        setChatMsgs(p=>[...p,{role:"assistant",text:"❌ Groq error: "+err}]);
+      } else {
+        const reply = data?.choices?.[0]?.message?.content || "No response received.";
+        setChatMsgs(p=>[...p,{role:"assistant",text:reply.trim()}]);
+      }
+
+    } catch(err){
+      setChatMsgs(p=>[...p,{role:"assistant",text:
+        "❌ Network error: "+err.message+"\n\nCheck your internet connection and try again."
+      }]);
     }
 
-    // Try Groq fallback
-    if(groqKey){
-      try{
-        const msgs2 = chatMsgs.slice(-6).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text}));
-        const r2 = await fetch("https://api.groq.com/openai/v1/chat/completions",{
-          method:"POST",
-          headers:{"Content-Type":"application/json","Authorization":"Bearer "+groqKey},
-          body:JSON.stringify({
-            model:"llama3-8b-8192",
-            messages:[{role:"system",content:sysPrompt},...msgs2,{role:"user",content:msg}],
-            max_tokens:500, temperature:0.3
-          })
-        });
-        const d2 = await r2.json();
-        if(r2.ok){
-          const reply2 = d2?.choices?.[0]?.message?.content||"";
-          if(reply2){ setChatMsgs(p=>[...p,{role:"assistant",text:reply2.trim()}]); setChatLoading(false); return; }
-        }
-        console.error("Groq error:",d2?.error?.message);
-      }catch(e){ console.error("Groq error:",e.message); }
-    }
-
-    setChatMsgs(p=>[...p,{role:"assistant",text:
-      "❌ Could not get a response.\n"+
-      "Make sure VITE_GEMINI_KEY is set in Vercel → Settings → Environment Variables, then Redeploy."
-    }]);
     setChatLoading(false);
   }
 
@@ -1750,13 +1780,13 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
           <div style={{fontSize:16,fontWeight:700}}>{t("🤖 AI Leave Assistant","🤖 AI නිවාඩු සහාය")}</div>
           <div style={{fontSize:10,background:"#f0fdf4",color:"#166534",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontWeight:600}}>
-            🆓 Gemini · Free
+            🆓 Groq · Free
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:10}}>
           {chatMsgs.length===0&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>Ask about leave rules, your balance, or any circular.<br/><span style={{color:"#15803d",fontWeight:600}}>Powered by Llama 3 via Groq (free, instant)</span><br/><span style={{color:"#1e3a52",fontSize:11}}>Responds in English or Sinhala</span></div>}
           {chatMsgs.map((m,i)=><div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}><div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?"#1565c0":"#f0f4f8",fontSize:13,lineHeight:1.6,color:C.text,whiteSpace:"pre-wrap"}}>{m.text}</div></div>)}
-          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center",padding:"8px 0"}}>🤔 Thinking…</div>}
+          {chatLoading&&<div style={{color:C.muted,fontSize:12,textAlign:"center",padding:"8px 0"}}>🤔 ⏳ Thinking...</div>}
           <div ref={chatEnd}/>
         </div>
         <div style={{display:"flex",gap:8,paddingTop:8,borderTop:"1px solid #dce3ea"}}>
@@ -2606,9 +2636,9 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       <div>
         <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>{t("⚙️ Settings & Admin","⚙️ සැකසුම් සහ පරිපාලන")}</div>
         {userRole==="registrar"&&<div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
-          👔 As Registrar, you can manage PINs for all staff. Staff add/remove is Director-only.
+          👔 As Registrar, you can manage PINs and add/remove staff members.
         </div>}
-        {userRole==="director"&&<>
+        {(userRole==="director"||userRole==="registrar")&&<>
         <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>👥 Add New Staff Member</div>
         <div style={{background:"#fff",border:"1px solid #dce3ea",borderRadius:12,padding:16,marginBottom:12}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
@@ -2815,12 +2845,25 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
           {isWkendHol(attDate)&&<div style={s.alertBox("warn")}>⚠️ Weekend/Public Holiday — no attendance required.</div>}
           {/* Rules reminder */}
           <div style={{...s.card,background:"rgba(56,189,248,0.04)",borderColor:"rgba(56,189,248,0.15)",padding:"10px 12px",marginBottom:12}}>
-            <div style={{fontSize:11,color:C.accent,fontWeight:700,marginBottom:4}}>📋 Time Rules</div>
-            <div style={{fontSize:11,color:"#64748b",lineHeight:1.8}}>
-              ✅ <b>Present:</b> Scan ≤ 08:30 &nbsp;|&nbsp; ⏱ <b>Minor Late:</b> 08:31–09:00 (2 forgiven/month)<br/>
-              🔴 <b>Late:</b> After 09:00 → must stay until <b>16:45</b> to cover<br/>
-              🌅 <b>Short Leave AM:</b> 08:30–10:00 &nbsp;|&nbsp; 🌇 <b>Short Leave PM:</b> Officer: 14:45–16:15 · Junior: 15:00–16:15<br/>
-              📅 <b>Short leave quota:</b> 2 per month (all staff)
+            <div style={{fontSize:11,color:C.accent,fontWeight:700,marginBottom:6}}>📋 Time Rules</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+              <div style={{background:"#eff6ff",borderRadius:6,padding:"6px 8px",fontSize:10}}>
+                <div style={{fontWeight:700,color:"#1d4ed8",marginBottom:2}}>👔 Officers (08:30)</div>
+                <div>✅ Arrive {"<"} 08:15 → Leave 16:00</div>
+                <div>✅ Arrive ≤ 08:30 → Leave 16:15</div>
+                <div>⏱ 08:31–09:00 → Minor Late → 16:45</div>
+                <div>🔴 {">"} 09:00 → Late → stay till 16:45</div>
+              </div>
+              <div style={{background:"#fefce8",borderRadius:6,padding:"6px 8px",fontSize:10}}>
+                <div style={{fontWeight:700,color:"#854d0e",marginBottom:2}}>🧹 Minor Staff (08:00)</div>
+                <div>✅ Arrive ≤ 08:00 → Leave 16:45</div>
+                <div>⏱ 08:01–08:15 → Minor Late → 17:00</div>
+                <div>🔴 {">"} 08:15 → Late → stay till 17:00</div>
+                <div style={{color:"#64748b"}}>* 16:15 without special duties</div>
+              </div>
+            </div>
+            <div style={{fontSize:10,color:"#64748b"}}>
+              🌅 <b>Short Leave AM:</b> 08:30–10:00 &nbsp;|&nbsp; 🌇 <b>PM:</b> Officer 14:45–16:15 · Junior 15:00–16:15 &nbsp;|&nbsp; 📋 Quota: 2/month
             </div>
           </div>
           {/* Stats row */}
