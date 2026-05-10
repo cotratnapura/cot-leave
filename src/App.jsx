@@ -67,7 +67,7 @@ const STAFF = [
   {empNo:"21811",  title:"Ms", initials:"G. N.",             lastName:"Jayathilaka",    fullName:"G. N. Jayathilaka",            dob:"1987-09-27", nic:"877711706V",   gender:"Female", joined:"2020-05-19", section:"Non Academic", designation:"Development Officer",       basicSalary:49469,  staffGrade:"officer"},
   {empNo:"23011",  title:"Ms", initials:"G. A. G. C.",       lastName:"Dilanka",        fullName:"G. A. G. C. Dilanka",          dob:"1994-08-04", nic:"199471703162", gender:"Female", joined:"2021-04-01", section:"Non Academic", designation:"ICT Assistant",             basicSalary:0,      staffGrade:"officer"},
   {empNo:"22981",  title:"Ms", initials:"O. R. C.",          lastName:"Udayangani",     fullName:"O. R. C. Udayangani",          dob:"1993-11-03", nic:"938080011V",   gender:"Female", joined:"2019-07-03", section:"Non Academic", designation:"ICT Assistant",             basicSalary:45781,  staffGrade:"officer"},
-  {empNo:"23921",  title:"Ms", initials:"P. G. P.",          lastName:"Ruvini",         fullName:"P. G. P. Ruvini",              dob:"1978-06-17", nic:"786690285V",   gender:"Female", joined:"2017-01-02", section:"Non Academic", designation:"Receptionist",              basicSalary:48946,  staffGrade:"junior"},
+  {empNo:"23921",  title:"Ms", initials:"P. G. P.",          lastName:"Ruvini",         fullName:"P. G. P. Ruvini",              dob:"1978-06-17", nic:"786690285V",   gender:"Female", joined:"2017-01-02", section:"Non Academic", designation:"Receptionist",              basicSalary:48946,  staffGrade:"officer"},
   {empNo:"25147",  title:"Ms", initials:"W.",                lastName:"Karunawathi",    fullName:"W. Karunawathi",               dob:"1966-03-30", nic:"665902234V",   gender:"Female", joined:"1999-11-01", section:"Non Academic", designation:"Office Employee Service",    basicSalary:50353,  staffGrade:"junior"},
   {empNo:"25238",  title:"Mr", initials:"S. R. A. C.",       lastName:"Ruwankumara",    fullName:"S. R. A. C. Ruwankumara",      dob:"1976-06-12", nic:"761641018V",   gender:"Male",   joined:"2019-04-01", section:"Non Academic", designation:"Office Employee Service",    basicSalary:47533,  staffGrade:"junior"},
   {empNo:"24725",  title:"Mr", initials:"S. S.",             lastName:"Jayarathna",     fullName:"S. Sumith Jayarathna",         dob:"1970-07-22", nic:"702042232V",   gender:"Male",   joined:"2002-06-03", section:"Non Academic", designation:"Driver",                    basicSalary:50797,  staffGrade:"junior"},
@@ -230,7 +230,7 @@ const JUNIOR_COVER_END  = "17:00";
 
 // Minor staff designations (report 08:00, cover until 17:00)
 const JUNIOR_DESIGNATIONS = [
-  "Receptionist", "Office Employee Service", "Driver",
+  "Office Employee Service", "Driver",
   "Lab Assistant", "Field Assistant", "Watcher"
 ];
 
