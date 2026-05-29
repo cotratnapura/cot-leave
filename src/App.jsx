@@ -160,10 +160,9 @@ const fmtD=d=>d?new Date(d).toLocaleDateString("en-GB"):"-";
 const getSvcYears=j=>Math.max(0,Math.floor((new Date()-new Date(j))/(365.25*864e5)));
 const getSvcMonths=j=>Math.max(0,Math.floor((new Date()-new Date(j))/(30.44*864e5)));
 const currYear=new Date().getFullYear();
-const EDIT_WINDOW_HOURS = 2; // Staff can edit/delete a leave within 2 hours of submitting
 
 function getUsedLeave(empNo, leaveRecords, type, year) {
-  return (leaveRecords[empNo]||[]).filter(r=>r.status==="Approved"&&r.type===type&&r.from.startsWith(String(year))).reduce((a,b)=>a+(b.days||0),0);
+  return (leaveRecords[empNo]||[]).filter(r=>r.status==="Approved"&&r.type===type&&r.from.startsWith(String(year))).reduce((a,b)=>a+b.days,0);
 }
 
 function getLeaveBalance(emp, leaveRecords, year=currYear) {
@@ -368,69 +367,6 @@ function genForm125a(rec, emp) {
 ║ Leave Officer: ......................   Head of Dept: .................   ║
 ║ Noted in Leave Register (Gen 190) · Folio No: ..........                 ║
 ╚══════════════════════════════════════════════════════════════════════════╝`.trim();
-}
-
-function genDutyLeaveForm(rec, emp, actingOfficer) {
-  const acting     = actingOfficer || "";
-  const fromDate   = rec.from  || "";
-  const toDate     = rec.to    || "";
-  const days       = rec.days  || "";
-  const reason     = rec.reason|| "";
-  const appliedOn  = rec.appliedOn || "";
-  const letterNote = rec.dutyLetterName
-      ? "✓ "+rec.dutyLetterName+" — Attached"
-      : "...................................................................................................";
-  const datesStr = fromDate && toDate
-      ? fromDate+" සිට "+toDate+" දක්වා  ("+days+" දින)"
-      : ".............................................................................................";
-
-  return `
-                         රාජකාරී නිවාඩු අනුමත කිරීම.
-                    ═══════════════════════════════════════════
-
-  01.  ආයතනය              :   College of Technology Ratnapura
-                               DTET ශ්‍රී ලංකා
-
-  02.  නිලධාරියාගේ නාමය    :   ${emp.fullName}
-
-  03.  නිලධාරියාගේ තනතුර   :   ${emp.designation}
-
-  04.  නිවාඩු අවශ්‍ය කාරණය  :   ${reason}
-       (අදාළ ලිපියේ පිටපතක් අමුණන්න)
-       ${letterNote}
-
-  05.  රාජකාරී නිවාඩු අවශ්‍ය දිනය/දිනයන්  :
-
-       ${datesStr}
-
-  ───────────────────────────────────────────────────────────────
-  06.  නිවාඩු දින ගණන      :   ${days} දින
-
-  07.  අයදුම්කරුගේ අත්සන   :   ......................     දිනය: ${appliedOn}
-
-  ═══════════════════════════════════════════════════════════════
-                    වැඩ ආවරණ නිලධාරියාගේ තොරතුරු
-  ═══════════════════════════════════════════════════════════════
-
-  01.  නාමය                :   ${acting||"........................................................................"}
-
-  02.  තනතුර               :   ........................................................................
-
-  03.  ජංගම දූරකථන අංකය    :   ........................................................................
-
-  04.  අත්සන               :   ......................     දිනය: ........................
-
-
-  ═══════════════════════════════════════════════════════════════
-
-                     නිවාඩු අනුමත කරමි / නොකරමි.
-
-
-
-       ............................................
-                   අධ්‍යක්ෂ
-       College of Technology Ratnapura
-       දිනය : .....................................`.trim();
 }
 
 function genForm190Entry(rec, emp) {
@@ -642,8 +578,6 @@ export default function App() {
   const chatEnd = useRef(null);
   const [chatMsgs, setChatMsgs] = useState([]); const [chatInput, setChatInput] = useState(""); const [chatLoading, setChatLoading] = useState(false); const [showChat, setShowChat] = useState(false);
   const [myLeaveSubTab,setMyLeaveSubTab]=useState("apply");
-  const [editingLeave,setEditingLeave]=useState(null); // {rec, empNo}
-  const EDIT_GRACE_HOURS=2; // staff can edit/delete within 2 hours of applying
   const [dutyLetterFile,setDutyLetterFile]=useState(null);
   const [dutyLetterName,setDutyLetterName]=useState("");
   const [histBalances,setHistBalances]=useState({}); // {empNo: [{year,casual,vacation,notes}]}
@@ -791,50 +725,6 @@ export default function App() {
   }
 
   // ── Leave actions ─────────────────────────────────────────────
-  // ── Edit / Delete leave ─────────────────────────────────────
-  function canEditLeave(rec){
-    // Can edit if: Pending AND applied within EDIT_GRACE_HOURS
-    if(rec.status!=="Pending") return false;
-    const applied=new Date(rec.appliedOn);
-    const hoursSince=(Date.now()-applied.getTime())/36e5;
-    return hoursSince<=EDIT_GRACE_HOURS;
-  }
-  function canDeleteLeave(rec){
-    // Can delete if: Pending (within grace) OR Approved but leave hasn't started yet
-    if(rec.status==="Pending"){
-      const applied=new Date(rec.appliedOn);
-      const hoursSince=(Date.now()-applied.getTime())/36e5;
-      return hoursSince<=EDIT_GRACE_HOURS;
-    }
-    if(rec.status==="Approved"){
-      // Allow delete if leave hasn't started yet
-      return rec.from > today();
-    }
-    return false;
-  }
-  async function deleteLeave(empNo,recId){
-    if(!window.confirm("Delete this leave application? This cannot be undone.")) return;
-    setLeaveRecords(prev=>{
-      const n={...prev};
-      n[empNo]=(n[empNo]||[]).filter(r=>r.id!==recId);
-      return n;
-    });
-    try{ await dbGet("leave_records","?id=eq."+recId,"DELETE"); }
-    catch(e){ console.error("delete leave:",e); }
-    setFormMsg({t:"success",m:"Leave application deleted."});
-  }
-  async function saveEditedLeave(empNo,recId,updates){
-    setLeaveRecords(prev=>{
-      const n={...prev};
-      n[empNo]=(n[empNo]||[]).map(r=>r.id===recId?{...r,...updates}:r);
-      return n;
-    });
-    try{ await dbUpsert("leave_records",{id:recId,emp_no:empNo,...updates}); }
-    catch(e){ console.error("edit leave:",e); }
-    setEditingLeave(null);
-    setFormMsg({t:"success",m:"Leave application updated."});
-  }
-
   function submitLeave(){
     if(!form.from||!form.to||!form.reason){setFormMsg({t:"error",m:"Fill all fields."});return;}
     const days=countWD(form.from,form.to);
@@ -847,54 +737,25 @@ export default function App() {
     setLeaveRecords(p=>({...p,[currentUser.empNo]:[...(p[currentUser.empNo]||[]),rec]}));
     setDutyLetterFile(null);setDutyLetterName("");
     setFormMsg({t:"success",m:`Submitted! ${days} day(s). Ref: ${today()}-${String(rec.id).slice(-4)}`});
-    // Auto-show duty form if duty leave was submitted
-    if(form.type==="Duty Leave"){
-      setTimeout(()=>setModal({
-        title:"රාජකාරී නිවාඩු අනුමත කිරීම — "+currentUser.fullName,
-        content:genDutyLeaveForm(rec,currentUser,ALL_STAFF.find(e=>e.empNo===actingEmpNo)?.fullName||actingEmpNo)
-      }),500);
-    }
-
     setForm(f=>({...f,from:"",to:"",reason:""}));
   }
 
-  // ── CORRECT APPROVAL WORKFLOW ──────────────────────────────────────
-  // ACADEMIC staff:
-  //   Pending → Director approves directly
-  // NON-ACADEMIC staff:
-  //   Pending → Leave Officer recommends → LO Recommended
-  //   LO Recommended → Registrar recommends → Reg Recommended
-  //   Reg Recommended → Director approves → Approved
-  // ────────────────────────────────────────────────────────────────────
-
-  function isAcademic(empNo){
-    const emp=ALL_STAFF.find(e=>e.empNo===empNo);
-    // Academic section, but NOT the fixed officer roles (they follow Non-Academic workflow)
-    return emp?.section==="Academic" && !["leave_officer","registrar","ict_officer"].includes(FIXED_ROLES[empNo]);
+  function canApprove(role, empNo) {
+    const emp=STAFF.find(e=>e.empNo===empNo);
+    if(role==="director") return true;
+    // Registrar can approve Non Academic directly OR recommend Non Academic LO-recommended leaves
+    if(role==="registrar") return emp?.section==="Non Academic";
+    return false;
+  }
+  // Registrar sees: Non Academic at LO Recommended stage (to add their recommendation)
+  // Registrar can also directly approve Non Academic at any stage
+  function registrarCanRecommend(empNo, status) {
+    const emp=STAFF.find(e=>e.empNo===empNo);
+    return emp?.section==="Non Academic" && status==="LO Recommended";
   }
 
-  // What Leave Officer should see: only Non Academic at Pending status
-  function loCanRecommend(r){
-    return !isAcademic(r.empNo) && r.status==="Pending";
-  }
-
-  // What Registrar should see: only Non Academic at LO Recommended status
-  function registrarCanRecommend(r){
-    return !isAcademic(r.empNo) && r.status==="LO Recommended";
-  }
-
-  // What Director should see:
-  //   Academic: Pending (direct approval)
-  //   Non Academic: Reg Recommended (final approval)
-  function directorCanApprove(r){
-    if(isAcademic(r.empNo)) return r.status==="Pending";
-    return r.status==="Reg Recommended";
-  }
-
-  async function doApprove(empNo,id){
-    setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:"Approved",approvedBy:currentUser?.fullName||userRole,approvedOn:today()}:r)}));
-    try{ await dbPatch("leave_records",`?id=eq.${id}`,{status:"Approved",approved_by:currentUser?.fullName||userRole,approved_on:today()}); }
-    catch(e){ console.error("Approve error:",e); }
+  function doApprove(empNo,id){
+    setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:"Approved",approvedBy:userRole,approvedOn:today()}:r)}));
   }
   async function doReject(empNo,id){
     setLeaveRecords(p=>({...p,[empNo]:p[empNo].map(r=>r.id===id?{...r,status:"Rejected"}:r)}));
@@ -1292,85 +1153,7 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
       const empCount=Object.keys(seen).filter(k=>k.endsWith("||"+d)).length;
       log.push("  📅 "+d+": "+empCount+" employees");
     });
-
-    // ── Cross-check: approved leave vs absent without scan ────────────────
-    log.push("");
-    log.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    log.push("🔍 LEAVE vs ATTENDANCE CROSS-CHECK");
-    log.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    let approvedCount=0, unauthorisedCount=0, presentOnLeave=0;
-
-    dates.forEach(d=>{
-      const isWeekend=new Date(d).getDay()===0||new Date(d).getDay()===6;
-      if(isWeekend) return;
-
-      const scannedEmps=new Set(Object.keys(attendanceUpdates[d]||{}));
-
-      ALL_STAFF.forEach(emp=>{
-        const empRecs=leaveRecords[emp.empNo]||[];
-        const onApprovedLeave=empRecs.some(r=>
-          r.status==="Approved" && d>=r.from && d<=r.to
-        );
-        const onPendingLeave=empRecs.some(r=>
-          (r.status==="Pending"||r.status==="LO Recommended"||r.status==="Reg Recommended")
-          && d>=r.from && d<=r.to
-        );
-        const hasScan=scannedEmps.has(emp.empNo);
-
-        if(hasScan && onApprovedLeave){
-          // Present but had approved leave — automatically restore (cancel) that day's leave
-          presentOnLeave++;
-          // Find the approved leave record covering this date
-          const leaveRec=empRecs.find(r=>r.status==="Approved"&&d>=r.from&&d<=r.to);
-          log.push("↩️ LEAVE RESTORED: "+emp.fullName+" ("+emp.empNo+") — "+d+" ["+( leaveRec?.type||"leave")+" balance +1 day restored: came to work]");
-          // If single-day leave → cancel it entirely
-          // If multi-day leave → mark this specific day as worked (reduce days by 1)
-                    if(leaveRec){
-            setLeaveRecords(prev=>{
-              const empRecs2=[...(prev[emp.empNo]||[])];
-              const ri=empRecs2.findIndex(r=>r.id===leaveRec.id);
-              if(ri<0) return prev;
-              const recDays=empRecs2[ri].days||1;
-              if(recDays<=1){
-                empRecs2[ri]={...empRecs2[ri],status:"Cancelled",cancelReason:"Staff came to work on "+d,cancelledOn:d};
-              } else {
-                empRecs2[ri]={...empRecs2[ri],days:recDays-1};
-              }
-              return {...prev,[emp.empNo]:empRecs2};
-            });
-          }
-        } else if(!hasScan && onApprovedLeave){
-          // Absent — has approved leave ✅
-          approvedCount++;
-          const leaveRec=empRecs.find(r=>r.status==="Approved"&&d>=r.from&&d<=r.to);
-          log.push("✅ APPROVED LEAVE: "+emp.fullName+" ("+emp.empNo+") — "+d+" ["+leaveRec?.type+"]");
-          // Mark as on_leave in attendance
-          if(!attendanceUpdates[d])attendanceUpdates[d]={};
-          if(!attendanceUpdates[d][emp.empNo]){
-            attendanceUpdates[d][emp.empNo]={status:"on_leave",scanTime:null,minorLate:false,coverUntil:null,fromScan:true};
-          }
-        } else if(!hasScan && onPendingLeave){
-          // Absent — has pending/unapproved leave ⚠️
-          unauthorisedCount++;
-          log.push("⚠️ ABSENT – PENDING LEAVE: "+emp.fullName+" ("+emp.empNo+") — "+d+" [leave not yet approved]");
-        } else if(!hasScan && !onApprovedLeave && !onPendingLeave){
-          // Absent — NO leave record at all ❌
-          unauthorisedCount++;
-          log.push("❌ ABSENT WITHOUT LEAVE: "+emp.fullName+" ("+emp.empNo+") — "+d+" [no leave application found]");
-        }
-      });
-    });
-
-    log.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    log.push("📊 SUMMARY:");
-    log.push("  ✅ On approved leave:       "+approvedCount);
-    log.push("  ❌ Absent WITHOUT approval: "+unauthorisedCount);
-    if(presentOnLeave>0)
-      log.push("  ↩️ Leave balance restored:  "+presentOnLeave+" (came to work on approved leave day)");
-    log.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
     if(dates.length>0)setAttDate(dates[dates.length-1]);
-    log.push("");
     log.push("✓ Done — switch to Attendance tab to review");
     setXlsxLog(log);
   }
@@ -1876,32 +1659,11 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
                       <div style={{fontSize:11,color:C.muted}}>{fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> {t("days","දින")}</div>
                       <div style={{fontSize:10,color:"#334155",marginTop:2}}>{r.reason?.substring(0,50)}</div>
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                      <span style={s.badge(r.status)}>{r.status}</span>
-                      {r.status==="Pending"&&(()=>{
-                        const hoursSince=(Date.now()-new Date(r.appliedOn).getTime())/(1000*3600);
-                        if(hoursSince>EDIT_WINDOW_HOURS) return <div style={{fontSize:9,color:C.muted,marginTop:2}}>⏰ Edit window closed</div>;
-                        return(
-                          <div style={{display:"flex",gap:4}}>
-                            <button style={{background:"#f59e0b",border:"none",borderRadius:6,padding:"3px 8px",color:"#fff",fontSize:10,cursor:"pointer",fontWeight:600}} onClick={()=>{
-                              const nr=window.prompt("Edit reason:",r.reason);
-                              if(nr===null||nr.trim()==="") return;
-                              setLeaveRecords(p=>{const a=[...(p[currentUser.empNo]||[])];const i=a.findIndex(x=>x.id===r.id);if(i>=0)a[i]={...a[i],reason:nr.trim()};return{...p,[currentUser.empNo]:a};});
-                            }}>✏️ Edit</button>
-                            <button style={{background:"#dc2626",border:"none",borderRadius:6,padding:"3px 8px",color:"#fff",fontSize:10,cursor:"pointer",fontWeight:600}} onClick={()=>{
-                              if(!window.confirm("Cancel this leave?\n"+r.type+" ("+r.from+" → "+r.to+")")) return;
-                              setLeaveRecords(p=>({...p,[currentUser.empNo]:(p[currentUser.empNo]||[]).filter(x=>x.id!==r.id)}));
-                            }}>🗑️ Cancel</button>
-                          </div>
-                        );
-                      })()}
-                    </div>
+                    <span style={s.badge(r.status)}>{r.status}</span>
                   </div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     <button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,currentUser)})}>📄 125a</button>
-                    {r.type==="Duty Leave"&&<button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"රාජකාරී නිවාඩු — "+currentUser.fullName,content:genDutyLeaveForm(r,currentUser,"")})}>📋 Duty Form</button>}
                     {r.status==="Approved"&&<button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 190 Entry",content:genForm190Entry(r,currentUser)})}>📓 190</button>}
-                    {r.type==="Duty Leave"&&<button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"රාජකාරී නිවාඩු — "+currentUser.fullName,content:genDutyLeaveForm(r,currentUser,"")})}>📋 Duty Form</button>}
                   </div>
                 </div>
               ))
@@ -1942,34 +1704,8 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
             {r.medCertRequired&&!r.medCertReceived&&r.status==="Approved"&&<div style={{fontSize:11,color:C.danger,background:"#ef444415",padding:"4px 8px",borderRadius:6,marginBottom:6}}>⚠️ Medical certificate not yet submitted</div>}
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               <button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,currentUser)})}>{t("📄 125a","📄 125a")}</button>
-              {r.type==="Duty Leave"&&<button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"රාජකාරී නිවාඩු — "+currentUser.fullName,content:genDutyLeaveForm(r,currentUser,"")})}>📋 Duty Form</button>}
               {r.status==="Approved"&&<button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 190 Entry",content:genForm190Entry(r,currentUser)})}>📓 190</button>}
-              {canEditLeave(r)&&<button style={{...s.btn("warn"),padding:"6px 12px",fontSize:11}} onClick={()=>setEditingLeave({rec:r,empNo:currentUser.empNo})}>✏️ Edit</button>}
-              {canDeleteLeave(r)&&<button style={{...s.btn("danger"),padding:"6px 12px",fontSize:11}} onClick={()=>deleteLeave(currentUser.empNo,r.id)}>🗑️ Delete</button>}
             </div>
-            {/* Edit form — inline */}
-            {editingLeave?.rec?.id===r.id&&<div style={{marginTop:10,background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:8}}>✏️ Edit Leave Application</div>
-              <div style={{fontSize:11,color:"#b45309",marginBottom:8}}>⏳ You have {Math.max(0,Math.round(EDIT_GRACE_HOURS*60-((Date.now()-new Date(r.appliedOn).getTime())/60000)))} minutes remaining to edit.</div>
-              <label style={s.label}>From Date</label>
-              <input type="date" style={{...s.input,marginBottom:8}} defaultValue={r.from} id={"edit-from-"+r.id} />
-              <label style={s.label}>To Date</label>
-              <input type="date" style={{...s.input,marginBottom:8}} defaultValue={r.to} id={"edit-to-"+r.id} />
-              <label style={s.label}>Reason</label>
-              <textarea style={{...s.input,minHeight:60,marginBottom:8,resize:"vertical"}} defaultValue={r.reason} id={"edit-reason-"+r.id} />
-              <div style={{display:"flex",gap:8}}>
-                <button style={{...s.btn("primary"),flex:1,padding:"8px 0"}} onClick={()=>{
-                  const from=document.getElementById("edit-from-"+r.id)?.value;
-                  const to=document.getElementById("edit-to-"+r.id)?.value;
-                  const reason=document.getElementById("edit-reason-"+r.id)?.value;
-                  if(!from||!to||!reason){alert("Fill all fields");return;}
-                  const days=countWD(from,to);
-                  if(days<=0){alert("No working days in range");return;}
-                  saveEditedLeave(currentUser.empNo,r.id,{from,to,reason,days});
-                }}>✅ Save Changes</button>
-                <button style={{...s.btn("outline"),padding:"8px 16px"}} onClick={()=>setEditingLeave(null)}>Cancel</button>
-              </div>
-            </div>}
           </div>
         ))}
       </div>
@@ -2050,185 +1786,1435 @@ L. A. Kithsiri, Director, College of Technology Ratnapura`.trim();
 
     // ── PENDING (Leave Officer) — Non Academic only ───────────────
     if(tab==="pending") {
-      // Leave Officer sees ONLY Non-Academic staff at "Pending" status
-      const loQueue = Object.entries(leaveRecords)
-        .flatMap(([e,rs])=>rs.map(r=>({...r,empNo:e})))
-        .filter(r=>loCanRecommend(r))
-        .sort((a,b)=>a.appliedOn>b.appliedOn?1:-1);
-
+      const naPending=pending.filter(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo);return emp?.section==="Non Academic";});
+      const acPending=pending.filter(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo);return emp?.section!=="Non Academic";});
       return(
         <div>
-          <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>⏳ {t("Pending Applications","අපේක්ෂිත ඉල්ලීම්")}</div>
-          <div style={{...s.alertBox("warn"),marginBottom:12,fontSize:11}}>
-            📋 Non-Academic staff leave awaiting your recommendation. After you recommend, it goes to the Registrar.
+          <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>⏳ Pending Applications</div>
+          <div style={{...s.alertBox("warn"),fontSize:11,marginBottom:12}}>
+            📋 <b>Your Role:</b> Recommend Non Academic staff leave only.<br/>
+            Academic staff go directly to the Director — no action needed from you.
           </div>
-
-          {loQueue.length===0
-            ? <div style={{...s.card,textAlign:"center",padding:40,color:C.muted}}>
-                <div style={{fontSize:28,marginBottom:8}}>✅</div>
-                <div>No pending applications</div>
+          {acPending.length>0&&<div style={{...s.card,padding:"10px 13px",marginBottom:10,borderLeft:"3px solid #64748b",background:"rgba(255,255,255,0.02)"}}>
+            <div style={{fontSize:11,color:C.muted,fontWeight:700,marginBottom:4}}>Academic Staff — {acPending.length} pending (goes directly to Director)</div>
+            {acPending.map(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo);return(
+              <div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
+                <div><div style={{fontSize:12,color:C.muted}}>{emp?.fullName}</div><div style={{fontSize:10,color:"#334155"}}>{r.type} · {r.days}d</div></div>
+                <span style={{fontSize:10,color:C.muted}}>Director only</span>
               </div>
-            : loQueue.map(r=>{
-                const emp=ALL_STAFF.find(e=>e.empNo===r.empNo);
-                return(
-                  <div key={r.id} style={{...s.card,borderLeft:"3px solid "+C.warn,marginBottom:10}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div>
-                        <div style={{fontSize:11,color:C.muted}}>{emp?.designation} · {emp?.section}</div>
-                      </div>
-                      <span style={s.badge(r.status)}>{r.status}</span>
-                    </div>
-                    <div style={{fontSize:12,marginBottom:4}}>
-                      <b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> {t("days","දින")}
-                    </div>
-                    <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
-                    {r.actingOfficer&&<div style={{fontSize:10,color:C.muted,marginBottom:8}}>
-                      🔄 Acting: {ALL_STAFF.find(e=>e.empNo===r.actingOfficer)?.fullName||r.actingOfficer}
-                    </div>}
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      <button style={{...s.btn("success"),padding:"9px 16px",fontSize:12}}
-                        onClick={()=>doRecommend(r.empNo,r.id,true,"leave_officer")}>
-                        ✅ Recommend
-                      </button>
-                      <button style={{...s.btn("danger"),padding:"9px 16px",fontSize:12}}
-                        onClick={()=>doRecommend(r.empNo,r.id,false,"leave_officer")}>
-                        ❌ Not Recommend
-                      </button>
-                      <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}}
-                        onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,emp)})}>📄 125a</button>
-                      {r.type==="Duty Leave"&&<button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}}
-                        onClick={()=>setModal({title:"Duty Form",content:genDutyLeaveForm(r,emp||{},r.actingOfficer||"")})}>📋 Duty</button>}
-                      {r.type==="Duty Leave"&&r.dutyLetter&&<button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}}
-                        onClick={()=>{const w=window.open();w.document.write('<img src="'+r.dutyLetter+'" style="max-width:100%"/>');}}>📎 Letter</button>}
-                    </div>
-                  </div>
-                );
-              })
-          }
+            );})}
+          </div>}
+          <div style={{fontSize:11,fontWeight:700,color:"#a78bfa",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Non Academic — Requires Your Recommendation</div>
+          {naPending.length===0?<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:12}}>No Non Academic applications pending</div>:
+          naPending.map(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo);return(
+            <div key={r.id} style={{...s.card,borderLeft:"3px solid #a78bfa"}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                <div><div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div><div style={{fontSize:11,color:C.muted}}>{emp?.designation}</div></div>
+                <span style={s.badge(r.status)}>{r.status}</span>
+              </div>
+              <div style={{fontSize:10,color:"#a78bfa",marginBottom:6}}>After your recommendation → Registrar recommends → Director approves</div>
+              <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
+              <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <button style={{...s.btn("success"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,true,"leave_officer")}>✓ Recommend</button>
+                <button style={{...s.btn("danger"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,false,"leave_officer")}>✗ Not Rec.</button>
+                <button style={{...s.btn("outline"),padding:"7px 10px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,emp)})}>📄</button>
+                <button style={{...s.btn("outline"),padding:"7px 10px",fontSize:11}} onClick={()=>setModal({title:"Gen 190",content:genForm190Entry(r,emp)})}>📓</button>
+              </div>
+            </div>
+          );})}
         </div>
       );
     }
+
+    // ── LEAVE REGISTER (Leave Officer) ───────────────────────────
+
+    // ── HISTORY TAB — Full Service Leave History per Staff Member ──────────────
+    if(tab==="history") {
+
+      // ── All staff including fixed roles ──────────────────────────────
+      const ALL_HIST_STAFF = ALL_STAFF; // already includes director/registrar/ict
+
+      // ── Compute accumulated totals for a staff member ─────────────────
+      const getAcc = (empNo) => {
+        const recs = histBalances[empNo] || [];
+        return {
+          casual:   recs.reduce((s,r)=>s+(r.casual||0),  0),
+          vacation: recs.reduce((s,r)=>s+(r.vacation||0),0),
+          halfPay:  recs.reduce((s,r)=>s+(r.halfPay||0), 0),
+          noPay:    recs.reduce((s,r)=>s+(r.noPay||0),   0),
+          years:    recs.length,
+        };
+      };
+
+      // ── Save one year record ──────────────────────────────────────────
+      const saveYear = async () => {
+        if(!hEmp || !hYear){ alert("Select a staff member and enter the year."); return; }
+        const yr  = parseInt(hYear);
+        const rec = {
+          year:    yr,
+          casual:  parseFloat(hCasual)||0,
+          vacation:parseFloat(hVac)||0,
+          halfPay: parseFloat(hHalfPay)||0,
+          noPay:   parseFloat(hNoPay)||0,
+          notes:   hNotes,
+          addedBy: currentUser?.fullName||"Leave Officer",
+          addedOn: today(),
+        };
+        setHistBalances(prev=>{
+          const prev2=(prev[hEmp]||[]).filter(r=>r.year!==yr);
+          return {...prev,[hEmp]:[...prev2,rec].sort((a,b)=>a.year-b.year)};
+        });
+        try{
+          await dbUpsert("leave_history",{
+            emp_no:hEmp, year:yr,
+            casual_bal:rec.casual, vacation_bal:rec.vacation,
+            half_pay_bal:rec.halfPay, no_pay_bal:rec.noPay,
+            notes:hNotes,
+            added_by:currentUser?.fullName||"Leave Officer",
+            added_on:today(),
+          });
+        }catch(e){ console.error("hist save:",e); }
+        setHYear(String(yr-1)); setHCasual(""); setHVac(""); setHHalfPay(""); setHNoPay(""); setHNotes("");
+      };
+
+      // ── Generate a full service summary report (for transfer / retirement) ──
+      const genServiceReport = (empNo) => {
+        const emp  = ALL_HIST_STAFF.find(e=>e.empNo===empNo);
+        if(!emp) return "";
+        const recs = (histBalances[empNo]||[]).slice().sort((a,b)=>a.year-b.year);
+        // Also include current year leave records from leaveRecords state
+        const currRecs = (leaveRecords[empNo]||[]);
+        const currYear2 = new Date().getFullYear();
+
+        // Group current records by year
+        const liveByYear = {};
+        currRecs.forEach(r=>{
+          const yr = parseInt((r.from||"").slice(0,4));
+          if(!yr) return;
+          if(!liveByYear[yr]) liveByYear[yr]={casual:0,vacation:0,halfPay:0,noPay:0,duty:0,comp:0};
+          const t=r.type||"";
+          const d=r.days||0;
+          if(r.status==="Approved"||r.status==="LO Recommended"||r.status==="Reg Recommended"){
+            if(t.includes("Casual"))    liveByYear[yr].casual   +=d;
+            else if(t.includes("Vac")||t.includes("Sick")) liveByYear[yr].vacation+=d;
+            else if(t.includes("Half")) liveByYear[yr].halfPay  +=d;
+            else if(t.includes("No Pay")) liveByYear[yr].noPay  +=d;
+            else if(t.includes("Duty"))  liveByYear[yr].duty    +=d;
+            else if(t.includes("Comp"))  liveByYear[yr].comp    +=d;
+          }
+        });
+
+        const acc=getAcc(empNo);
+        const svcYrs = Math.floor((new Date()-new Date(emp.joined))/(365.25*864e5));
+
+        let rows="";
+        recs.forEach(r=>{
+          const live=liveByYear[r.year]||{};
+          rows+=`  ${r.year}  |  C:${r.casual||0}d remaining  |  V/S:${r.vacation||0}d remaining  |  HP:${r.halfPay||0}d taken  |  NP:${r.noPay||0}d taken${r.notes?"  |  Note: "+r.notes:""}\n`;
+        });
+        // Add years with live records not yet in history
+        Object.keys(liveByYear).sort().forEach(yr=>{
+          if(!recs.find(r=>r.year===parseInt(yr))){
+            const live=liveByYear[yr];
+            rows+=`  ${yr}  |  (Current system data) C used:${live.casual}d  V/S used:${live.vacation}d  HP:${live.halfPay}d  NP:${live.noPay}d\n`;
+          }
+        });
+        if(!rows) rows="  No service history recorded yet.\n";
+
+        return [
+          "═".repeat(60),
+          "  SERVICE LEAVE HISTORY REPORT",
+          "  "+today()+" — "+currentUser?.fullName+" (Leave Officer)",
+          "═".repeat(60),
+          "",
+          "  OFFICER DETAILS",
+          "  ─".repeat(30),
+          "  Full Name   : "+emp.fullName,
+          "  Designation : "+emp.designation,
+          "  Section     : "+emp.section,
+          "  Grade       : "+emp.staffGrade,
+          "  NIC         : "+(emp.nic||"—"),
+          "  Joined      : "+emp.joined,
+          "  Service     : ~"+svcYrs+" year(s)",
+          "",
+          "  YEAR-BY-YEAR LEAVE HISTORY",
+          "  ─".repeat(30),
+          "  (C=Casual  V/S=Vacation/Sick  HP=Half Pay  NP=No Pay)",
+          "",
+          rows,
+          "  ACCUMULATED TOTALS (from recorded history)",
+          "  ─".repeat(30),
+          "  Total Casual remaining (carry-forward) : "+acc.casual+" days",
+          "  Total Vacation/Sick remaining           : "+acc.vacation+" days",
+          "  Total Half Pay leave taken              : "+acc.halfPay+" days",
+          "  Total No Pay leave taken                : "+acc.noPay+" days",
+          "",
+          "  CURRENT YEAR LEAVE ("+currYear2+")",
+          "  ─".repeat(30),
+          ...(()=>{
+            const ly=liveByYear[currYear2]||{};
+            return [
+              "  Casual used      : "+(ly.casual||0)+" days",
+              "  Vacation/Sick    : "+(ly.vacation||0)+" days",
+              "  Half Pay         : "+(ly.halfPay||0)+" days",
+              "  No Pay           : "+(ly.noPay||0)+" days",
+              "  Duty Leave       : "+(ly.duty||0)+" days",
+              "  Compensatory     : "+(ly.comp||0)+" days",
+            ];
+          })(),
+          "",
+          "═".repeat(60),
+          "  This report is generated for official use.",
+          "  COT Ratnapura — DTET Sri Lanka",
+          "═".repeat(60),
+        ].join("\n");
+      };
+
+      return (
+        <div>
+          <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>📚 Service Leave History</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+            Record year-by-year leave history for all staff. Generate transfer / retirement summaries.
+          </div>
+
+          {/* Sub-tab switcher */}
+          <div style={{display:"flex",gap:6,marginBottom:14}}>
+            {[{k:"entry",l:"➕ Enter History"},{k:"view",l:"📋 View History"},{k:"report",l:"📄 Service Report"}].map(st=>(
+              <button key={st.k}
+                style={{...s.btn(hSubTab===st.k?"primary":"outline"),padding:"8px 10px",fontSize:12,flex:1}}
+                onClick={()=>setHSubTab(st.k)}>{st.l}</button>
+            ))}
+          </div>
+
+          {/* ══ ENTRY SUB-TAB ══════════════════════════════════════════ */}
+          {hSubTab==="entry"&&<>
+            <div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
+              📌 Enter the <b>remaining balance</b> for Casual &amp; Vacation/Sick leave, and <b>total days taken</b> for Half Pay &amp; No Pay leave — for each year of the officer's service.
+            </div>
+
+            {/* Staff selector */}
+            <label style={s.label}>Staff Member</label>
+            <select style={{...s.select,marginBottom:8}} value={hEmp} onChange={e=>{setHEmp(e.target.value);}}>
+              <option value="">— Select staff member —</option>
+              <optgroup label="── Director / Officers ──">
+                {ALL_HIST_STAFF.filter(e=>Object.keys(FIXED_ROLES).includes(e.empNo)).map(e=>(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName} — {e.designation}</option>
+                ))}
+              </optgroup>
+              <optgroup label="── Academic Staff ──">
+                {ALL_HIST_STAFF.filter(e=>e.section==="Academic"&&!Object.keys(FIXED_ROLES).includes(e.empNo)).map(e=>(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName}</option>
+                ))}
+              </optgroup>
+              <optgroup label="── Non Academic Staff ──">
+                {ALL_HIST_STAFF.filter(e=>e.section==="Non Academic"&&!Object.keys(FIXED_ROLES).includes(e.empNo)).map(e=>(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName}</option>
+                ))}
+              </optgroup>
+            </select>
+
+            {/* Show summary of already entered years */}
+            {hEmp&&(()=>{
+              const emp=ALL_HIST_STAFF.find(e=>e.empNo===hEmp);
+              const recs=histBalances[hEmp]||[];
+              const acc=getAcc(hEmp);
+              return(
+                <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 14px",marginBottom:10,fontSize:12}}>
+                  <b>{emp?.fullName}</b> · Joined {emp?.joined} · {recs.length} year(s) recorded<br/>
+                  <span style={{color:"#1d4ed8"}}>📋 Casual: {acc.casual}d</span> &nbsp;
+                  <span style={{color:"#15803d"}}>🌴 Vac/Sick: {acc.vacation}d</span> &nbsp;
+                  <span style={{color:"#b45309"}}>🏥 Half Pay: {acc.halfPay}d</span> &nbsp;
+                  <span style={{color:"#6b7280"}}>📌 No Pay: {acc.noPay}d</span>
+                  {recs.length>0&&<div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {recs.map(r=>(
+                      <span key={r.year} style={{background:"#dcfce7",borderRadius:6,padding:"2px 8px",fontSize:11,color:"#166534"}}>{r.year}</span>
+                    ))}
+                  </div>}
+                </div>
+              );
+            })()}
+
+            {/* Year + 4 leave fields */}
+            <label style={s.label}>Year</label>
+            <input type="number" style={{...s.input,marginBottom:8}} value={hYear}
+              onChange={e=>setHYear(e.target.value)} min="1990" max={new Date().getFullYear()} />
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <div>
+                <label style={s.label}>📋 Casual Leave Remaining (days)</label>
+                <input type="number" style={s.input} value={hCasual} min="0" max="42" step="0.5" placeholder="0"
+                  onChange={e=>setHCasual(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Balance remaining at year end</div>
+              </div>
+              <div>
+                <label style={s.label}>🌴 Vacation/Sick Remaining (days)</label>
+                <input type="number" style={s.input} value={hVac} min="0" max="96" step="0.5" placeholder="0"
+                  onChange={e=>setHVac(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Balance — can compensate future excess</div>
+              </div>
+              <div>
+                <label style={s.label}>🏥 Half Pay Leave Taken (days)</label>
+                <input type="number" style={s.input} value={hHalfPay} min="0" step="0.5" placeholder="0"
+                  onChange={e=>setHHalfPay(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Total days taken that year</div>
+              </div>
+              <div>
+                <label style={s.label}>📌 No Pay Leave Taken (days)</label>
+                <input type="number" style={s.input} value={hNoPay} min="0" step="0.5" placeholder="0"
+                  onChange={e=>setHNoPay(e.target.value)} />
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Total days taken that year</div>
+              </div>
+            </div>
+
+            <label style={s.label}>Notes (optional)</label>
+            <input style={{...s.input,marginBottom:12}} value={hNotes} onChange={e=>setHNotes(e.target.value)}
+              placeholder="e.g. Transferred from Matara College with 5d casual balance" />
+
+            <button style={{background:"#1d4ed8",border:"none",borderRadius:10,padding:"13px 0",
+              color:"#fff",fontWeight:700,fontSize:15,width:"100%",cursor:"pointer",marginBottom:8}}
+              onClick={saveYear}>
+              ✅ Save Year {hYear}
+            </button>
+            {hEmp&&(histBalances[hEmp]||[]).length>0&&(
+              <button style={{...s.btn("outline"),width:"100%",padding:"10px 0"}}
+                onClick={()=>setHSubTab("view")}>
+                📋 View All Years for This Staff →
+              </button>
+            )}
+          </>}
+
+          {/* ══ VIEW SUB-TAB ═══════════════════════════════════════════ */}
+          {hSubTab==="view"&&<>
+            <label style={s.label}>Select Staff Member</label>
+            <select style={{...s.select,marginBottom:12}} value={hView} onChange={e=>setHView(e.target.value)}>
+              <option value="">— Select staff member —</option>
+              {ALL_HIST_STAFF.map(e=>{
+                const recs=histBalances[e.empNo]||[];
+                return recs.length>0?(
+                  <option key={e.empNo} value={e.empNo}>{e.fullName} ({recs.length} yr{recs.length>1?"s":""})</option>
+                ):null;
+              }).filter(Boolean)}
+            </select>
+
+            {hView&&(()=>{
+              const emp=ALL_HIST_STAFF.find(e=>e.empNo===hView);
+              const recs=(histBalances[hView]||[]).slice().sort((a,b)=>a.year-b.year);
+              const acc=getAcc(hView);
+              return(<>
+                {/* Summary cards */}
+                <div style={{...s.card,marginBottom:10}}>
+                  <div style={{fontSize:14,fontWeight:700,marginBottom:2}}>{emp?.fullName}</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>{emp?.designation} · Joined {emp?.joined}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:6}}>
+                    <div style={{background:"#eff6ff",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#1d4ed8"}}>{acc.casual}</div>
+                      <div style={{fontSize:10,color:C.muted}}>📋 Casual Remaining</div>
+                    </div>
+                    <div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{acc.vacation}</div>
+                      <div style={{fontSize:10,color:C.muted}}>🌴 Vac/Sick Remaining</div>
+                    </div>
+                    <div style={{background:"#fffbeb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#b45309"}}>{acc.halfPay}</div>
+                      <div style={{fontSize:10,color:C.muted}}>🏥 Half Pay Total</div>
+                    </div>
+                    <div style={{background:"#f9fafb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:22,fontWeight:800,color:"#6b7280"}}>{acc.noPay}</div>
+                      <div style={{fontSize:10,color:C.muted}}>📌 No Pay Total</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Year by year table */}
+                <div style={{...s.card,padding:0,overflow:"hidden",marginBottom:10}}>
+                  <div style={{background:"#1e3a5f",color:"#fff",padding:"10px 14px",fontSize:12,fontWeight:700}}>
+                    Year-by-Year Breakdown ({recs.length} year{recs.length!==1?"s":""})
+                  </div>
+                  {/* Table header */}
+                  <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr 1fr",gap:0,background:"#f8fafc",borderBottom:"1px solid #e2e8f0",padding:"6px 10px",fontSize:10,fontWeight:700,color:C.muted}}>
+                    <span>Year</span><span style={{textAlign:"center"}}>📋 Casual</span><span style={{textAlign:"center"}}>🌴 Vac/Sick</span><span style={{textAlign:"center"}}>🏥 HP</span><span style={{textAlign:"center"}}>📌 NP</span>
+                  </div>
+                  {recs.map((r,i)=>(
+                    <div key={r.year} style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr 1fr",gap:0,
+                      padding:"8px 10px",borderBottom:"1px solid #f0f4f8",
+                      background:i%2===0?"#fff":"#fafafa",alignItems:"center"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"#1d4ed8"}}>{r.year}</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#1d4ed8"}}>{r.casual||0}d</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#15803d"}}>{r.vacation||0}d</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#b45309"}}>{r.halfPay||0}d</span>
+                      <span style={{textAlign:"center",fontSize:12,fontWeight:600,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        {r.noPay||0}d
+                        <button style={{background:"none",border:"none",color:C.danger,cursor:"pointer",fontSize:12,padding:"0 2px"}}
+                          onClick={async()=>{
+                            if(!window.confirm("Delete "+r.year+" record for "+emp.fullName+"?")) return;
+                            setHistBalances(prev=>({...prev,[hView]:prev[hView].filter(x=>x.year!==r.year)}));
+                            try{ await dbGet("leave_history","?emp_no=eq."+hView+"&year=eq."+r.year); }catch(e){}
+                          }}>✕</button>
+                      </span>
+                    </div>
+                  ))}
+                  {recs.length===0&&<div style={{padding:20,textAlign:"center",color:C.muted,fontSize:12}}>No history recorded yet.</div>}
+                </div>
+                {r.notes&&<div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginBottom:6}}>Note: {recs[recs.length-1]?.notes}</div>}
+
+                <button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}}
+                  onClick={()=>{setHSubTab("report");setHView(hView);}}>
+                  📄 Generate Service Report for {emp?.fullName} →
+                </button>
+              </>);
+            })()}
+
+            {!hView&&Object.keys(histBalances).length===0&&(
+              <div style={{...s.card,textAlign:"center",padding:32,color:C.muted}}>
+                <div style={{fontSize:32,marginBottom:8}}>📂</div>
+                <div style={{fontSize:13}}>No history recorded yet.</div>
+                <div style={{fontSize:11,marginTop:4}}>Go to "Enter History" to add year-by-year records.</div>
+              </div>
+            )}
+          </>}
+
+          {/* ══ REPORT SUB-TAB ═════════════════════════════════════════ */}
+          {hSubTab==="report"&&<>
+            <div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
+              📄 Generate a full service leave summary for transfer, retirement, or official records.
+            </div>
+            <label style={s.label}>Select Staff Member</label>
+            <select style={{...s.select,marginBottom:12}} value={hView} onChange={e=>setHView(e.target.value)}>
+              <option value="">— Select staff member —</option>
+              {ALL_HIST_STAFF.map(e=>(
+                <option key={e.empNo} value={e.empNo}>{e.fullName} — {e.designation}</option>
+              ))}
+            </select>
+
+            {hView&&(()=>{
+              const emp=ALL_HIST_STAFF.find(e=>e.empNo===hView);
+              const recs=(histBalances[hView]||[]).slice().sort((a,b)=>a.year-b.year);
+              const acc=getAcc(hView);
+              return(<>
+                {/* Report preview */}
+                <div style={{...s.card,borderLeft:"4px solid #1d4ed8",marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>{emp?.fullName}</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>{emp?.designation} · {emp?.section} · Joined {emp?.joined}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                    <div style={{background:"#eff6ff",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#1d4ed8"}}>{acc.casual}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>Casual Carry-forward</div>
+                    </div>
+                    <div style={{background:"#f0fdf4",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#15803d"}}>{acc.vacation}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>Vacation/Sick Balance</div>
+                    </div>
+                    <div style={{background:"#fffbeb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#b45309"}}>{acc.halfPay}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>Half Pay (total)</div>
+                    </div>
+                    <div style={{background:"#f9fafb",borderRadius:8,padding:"8px 0",textAlign:"center"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#6b7280"}}>{acc.noPay}d</div>
+                      <div style={{fontSize:10,color:C.muted}}>No Pay (total)</div>
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,color:C.muted,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>
+                    {recs.length} Year{recs.length!==1?"s":""} on Record
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {recs.map(r=>(
+                      <span key={r.year} style={{background:"#dbeafe",color:"#1d4ed8",borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:600}}>{r.year}</span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Purpose selector */}
+                <label style={s.label}>Report Purpose</label>
+                <select style={{...s.select,marginBottom:12}} id="report-purpose">
+                  <option>Transfer to another institution</option>
+                  <option>Retirement</option>
+                  <option>Resignation</option>
+                  <option>Annual audit</option>
+                  <option>Officer request</option>
+                  <option>Other official purpose</option>
+                </select>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <button style={{background:"#1e3a5f",border:"none",borderRadius:10,padding:"12px 0",
+                    color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}
+                    onClick={()=>{
+                      const purpose=document.getElementById("report-purpose")?.value||"Official purpose";
+                      setModal({title:"Service Report — "+emp.fullName,content:genServiceReport(hView)});
+                    }}>
+                    📄 View Report
+                  </button>
+                  <button style={{background:"#15803d",border:"none",borderRadius:10,padding:"12px 0",
+                    color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}
+                    onClick={()=>{
+                      const purpose=document.getElementById("report-purpose")?.value||"Official purpose";
+                      const report=genServiceReport(hView);
+                      setModal({title:"Service Report — "+emp.fullName+" ("+purpose+")",content:report});
+                    }}>
+                    🖨️ Print Report
+                  </button>
+                </div>
+              </>);
+            })()}
+          </>}
+        </div>
+      );
+    }
+
+
+        if(tab==="register") return(
+      <div>
+        {/* Manual Leave Entry card */}
+        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>📓 Leave Register (Gen 190)</div>
+        {/* ── Historical Leave Balance Entry ── */}
+        <label style={s.label}>Month</label>
+        <input type="month" style={{...s.input,marginBottom:12}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
+        {/* ── Manual Leave Entry (Maternity / Half Pay / No Pay) ── */}
+        <div style={{fontSize:13,fontWeight:700,color:"#92400e",textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>📋 Manual Leave Entry</div>
+        <div style={{background:"#fff",border:"2px solid #c4a227",borderRadius:14,padding:16,marginBottom:16}}>
+          <div style={{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:10}}>For <b>Maternity</b>, <b>Half Pay</b> & <b>No Pay Leave</b> — approved by the Department, not self-applied</div>
+          <label style={s.label}>Staff Member</label>
+          <select style={{...s.select,marginBottom:8}} id="ml-emp">
+            <option value="">— Select staff —</option>
+            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
+          </select>
+          <label style={s.label}>Leave Type</label>
+          <select style={{...s.select,marginBottom:8}} id="ml-type">
+            <option value="Maternity Leave">Maternity Leave (84 days)</option>
+            <option value="Duty Leave">Duty Leave</option>
+            <option value="Half Pay Leave">Half Pay Leave</option>
+            <option value="No Pay Leave">No Pay Leave</option>
+          </select>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>From</label><input type="date" style={s.input} id="ml-from" /></div>
+            <div><label style={s.label}>To</label><input type="date" style={s.input} id="ml-to" /></div>
+          </div>
+          <label style={s.label}>Department Reference / Reason</label>
+          <input style={{...s.input,marginBottom:10}} id="ml-reason" placeholder="e.g. Dept. approval ref: DTET/2026/..." />
+          <button style={{background:"#c4a227",border:"none",borderRadius:10,padding:"12px 0",color:"#fff",fontWeight:700,fontSize:14,width:"100%",cursor:"pointer"}} onClick={()=>{
+            const empNo=document.getElementById("ml-emp")?.value;
+            const type=document.getElementById("ml-type")?.value;
+            const from=document.getElementById("ml-from")?.value;
+            const to=document.getElementById("ml-to")?.value;
+            const reason=document.getElementById("ml-reason")?.value;
+            if(!empNo||!from||!to||!reason){alert("Please fill all fields.");return;}
+            const days=countWD(from,to);
+            if(days<=0){alert("No working days in range.");return;}
+            const rec={id:Date.now(),type,from,to,days,reason,status:"Approved",appliedOn:today(),approvedOn:today(),approvedBy:currentUser?.fullName||"Leave Officer",medCertRequired:false,medCertReceived:false,manualEntry:true};
+            setLeaveRecords(prev=>({...prev,[empNo]:[...(prev[empNo]||[]),rec]}));
+            dbInsert("leave_records",{emp_no:empNo,...rec}).catch(e=>console.error(e));
+            alert("Recorded: "+type+" ("+days+" days). Staff can view in their Records tab.");
+            ["ml-from","ml-to","ml-reason"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+          }}>✅ Record Manual Leave Entry</button>
+        </div>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>📓 Monthly Leave Register — Gen 190</div>
+        <button style={{...s.btn("purple"),width:"100%",padding:"12px 0",marginBottom:12}} onClick={()=>setModal({title:`Gen 190 — ${reportMonth}`,content:genMonthlyGen190(leaveRecords,reportMonth)})}>
+          📓 Generate Monthly Gen 190 Report
+        </button>
+        {allLeaves.filter(r=>r.status==="Approved"&&r.from.startsWith(reportMonth)).map(r=>{
+          const emp=STAFF.find(e=>e.empNo===r.empNo);
+          return <div key={r.id} style={{...s.card,padding:"12px 14px",marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <div><div style={{fontSize:12,fontWeight:700}}>{emp?.fullName}</div><div style={{fontSize:10,color:C.muted}}>{r.type} · {r.days} days</div></div>
+              {r.medCertRequired&&<div style={{display:"flex",gap:6}}>
+                {r.medCertReceived?<span style={{fontSize:10,color:C.success}}>✅ Cert</span>:<button style={{...s.btn("warn"),padding:"4px 8px",fontSize:10}} onClick={()=>markMedCert(r.empNo,r.id)}>Mark Cert ✓</button>}
+              </div>}
+            </div>
+            <button style={{...s.btn("outline"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Gen 190 — ${emp?.fullName}`,content:genForm190Entry(r,emp)})}>📓 190</button>
+          </div>;
+        })}
+      </div>
+    );
+
+    // ── ALERTS (Leave Officer) ───────────────────────────────────
+    if(tab==="alerts") return(
+      <div>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>🚨 Alerts & Notifications</div>
+        {/* Medical cert overdue */}
+        <div style={{fontSize:12,color:C.warn,fontWeight:700,marginBottom:8,textTransform:"uppercase"}}>⏰ Medical Certificate Overdue</div>
+        {STAFF.map(emp=>{const od=medCertOverdue(emp,leaveRecords); return od.length>0?(
+          <div key={emp.empNo} style={{...s.card,borderColor:"#ef444433",marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{emp.fullName}</div>
+            {od.map(r=><div key={r.id} style={{fontSize:11,color:C.muted,marginBottom:4}}>{r.type} · {fmtD(r.from)} → {fmtD(r.to)} · Applied: {r.appliedOn}</div>)}
+            <div style={{display:"flex",gap:6,marginTop:8}}>
+              <button style={{...s.btn("warn"),padding:"7px 12px",fontSize:11}} onClick={()=>setModal({title:`Med Cert Reminder — ${emp.fullName}`,content:genMedCertReminder(emp,od)})}>📨 Reminder Letter</button>
+              {od.map(r=><button key={r.id} style={{...s.btn("success"),padding:"7px 12px",fontSize:11}} onClick={()=>markMedCert(emp.empNo,r.id)}>✓ Mark Received</button>)}
+            </div>
+          </div>
+        ):null;})}
+
+        {/* Abnormal leave */}
+        <div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:8,marginTop:16,textTransform:"uppercase"}}>🚨 Abnormal Leave Usage ({currYear})</div>
+        {STAFF.map(emp=>{const ab=isAbnormal(emp,leaveRecords); return (ab.abnormal||ab.severe)?(
+          <div key={emp.empNo} style={{...s.card,borderColor:ab.severe?"#ef444433":"#f59e0b33",marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+              <div><div style={{fontSize:13,fontWeight:700}}>{emp.fullName}</div><div style={{fontSize:11,color:C.muted}}>{emp.designation}</div></div>
+              <span style={{fontSize:11,fontWeight:700,color:ab.severe?C.danger:C.warn,background:ab.severe?"#ef444418":"#f59e0b18",padding:"2px 8px",borderRadius:6}}>{ab.severe?"EXHAUSTED":"HIGH"}</span>
+            </div>
+            <div style={{fontSize:11,color:"#94a3b8",marginBottom:8}}>Casual: {ab.cas} used · Vacation: {ab.vac} used</div>
+            <button style={{...s.btn(ab.severe?"danger":"warn"),padding:"8px 14px",fontSize:12}} onClick={()=>setModal({title:`Advisory Letter — ${emp.fullName}`,content:genAbnormalLetter(emp,leaveRecords)})}>📨 Advisory Letter</button>
+          </div>
+        ):null;})}
+
+        {STAFF.every(emp=>!isAbnormal(emp,leaveRecords).abnormal)&&STAFF.every(emp=>medCertOverdue(emp,leaveRecords).length===0)&&
+          <div style={{...s.card,textAlign:"center",padding:30,color:C.success}}>✅ No alerts at this time</div>}
+      </div>
+    );
 
     // ── APPROVE (Director + Registrar) ───────────────────────────
     if(tab==="approve") {
-      const allRecs = Object.entries(leaveRecords)
-        .flatMap(([e,rs])=>rs.map(r=>({...r,empNo:e})));
-
-      // Registrar: sees Non-Academic at "LO Recommended" only
-      const regQueue = allRecs.filter(r=>registrarCanRecommend(r));
-
-      // Director: sees Academic at "Pending" + Non-Academic at "Reg Recommended"
-      const dirQueue = allRecs.filter(r=>directorCanApprove(r));
-
-      const queue = userRole==="registrar" ? regQueue : dirQueue;
-
+      // Registrar sees two sections:
+      //   1. Non Academic at "LO Recommended" → Registrar recommends/not recommends
+      //   2. Non Academic at any stage → Registrar can approve directly
+      const regToRecommend = loRecommended.filter(r=>registrarCanRecommend(r.empNo,r.status));
+      const regCanApprove  = [...pending,...loRecommended,...regRecommended].filter(r=>canApprove(userRole,r.empNo));
+      const dirCanApprove  = [...pending,...loRecommended,...regRecommended].filter(r=>canApprove(userRole,r.empNo));
       return(
         <div>
-          <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>✅ {userRole==="registrar"?"Registrar Panel":"Director Approval"}</div>
+          <div style={{fontSize:16,fontWeight:700,marginBottom:10}}>✅ {userRole==="registrar"?"Registrar Panel":"Director Approval"}</div>
 
-          {/* Workflow info */}
-          {userRole==="director"&&<div style={{...s.alertBox("warn"),marginBottom:12,fontSize:11}}>
-            <b>Academic Staff</b> — you approve directly (no LO/Registrar needed).<br/>
-            <b>Non-Academic Staff</b> — only applications recommended by both LO and Registrar appear here.
-          </div>}
-          {userRole==="registrar"&&<div style={{...s.alertBox("warn"),marginBottom:12,fontSize:11}}>
-            Non-Academic applications already recommended by the Leave Officer. After your recommendation they go to the Director for final approval.
-          </div>}
-
-          {/* Academic section (Director only) */}
-          {userRole==="director"&&(()=>{
-            const academic = dirQueue.filter(r=>isAcademic(r.empNo));
-            return academic.length>0&&(
-              <>
-                <div style={{fontSize:11,fontWeight:700,color:"#1d4ed8",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>
-                  🎓 Academic Staff — Direct Approval
+          {userRole==="registrar"&&<>
+            {/* Section A: Registrar recommends Non Academic LO-recommended leaves */}
+            {regToRecommend.length>0&&<>
+              <div style={{fontSize:11,fontWeight:700,color:"#a78bfa",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
+                📝 Awaiting Your Recommendation (Non Academic — LO already recommended)
+              </div>
+              {regToRecommend.map(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo); return(
+                <div key={r.id} style={{...s.card,borderLeft:"3px solid #a78bfa"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                    <div><div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div><div style={{fontSize:11,color:C.muted}}>{emp?.designation}</div></div>
+                    <span style={s.badge(r.status)}>{r.status}</span>
+                  </div>
+                  <div style={{fontSize:10,background:"rgba(167,139,250,0.1)",borderRadius:6,padding:"4px 8px",marginBottom:8,color:"#a78bfa"}}>Leave Officer has recommended · Your recommendation goes to Director for final approval</div>
+                  <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
+                  <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <button style={{...s.btn("success"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,true,"registrar")}>✓ Recommend to Director</button>
+                    <button style={{...s.btn("danger"),padding:"8px 14px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,false,"registrar")}>✗ Not Recommend</button>
+                    <button style={{...s.btn("primary"),padding:"8px 14px",fontSize:12}} onClick={()=>doApprove(r.empNo,r.id)}>⚡ Approve Directly</button>
+                    <button style={{...s.btn("outline"),padding:"7px 10px",fontSize:11}} onClick={()=>setModal({title:"125a",content:genForm125a(r,emp)})}>📄</button>
+                  </div>
                 </div>
-                {academic.map(r=>{
-                  const emp=ALL_STAFF.find(e=>e.empNo===r.empNo);
-                  return(
-                    <div key={r.id} style={{...s.card,borderLeft:"3px solid #1d4ed8",marginBottom:10}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                        <div>
-                          <div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div>
-                          <div style={{fontSize:11,color:C.muted}}>{emp?.designation} · Academic</div>
-                        </div>
-                        <span style={s.badge(r.status)}>{r.status}</span>
-                      </div>
-                      <div style={{fontSize:12,marginBottom:4}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> {t("days","දින")}</div>
-                      <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
-                      {r.actingOfficer&&<div style={{fontSize:10,color:C.muted,marginBottom:6}}>🔄 Acting: {ALL_STAFF.find(e=>e.empNo===r.actingOfficer)?.fullName||r.actingOfficer}</div>}
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                        <button style={{...s.btn("success"),padding:"10px 18px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✅ Approve</button>
-                        <button style={{...s.btn("danger"),padding:"10px 18px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>❌ Reject</button>
-                        <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,emp)})}>📄 125a</button>
-                        {r.type==="Duty Leave"&&<button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"Duty Form",content:genDutyLeaveForm(r,emp||{},r.actingOfficer||"")})}>📋 Duty</button>}
-                        {r.type==="Duty Leave"&&r.dutyLetter&&<button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>{const w=window.open();w.document.write('<img src="'+r.dutyLetter+'" style="max-width:100%"/>');}}>📎 Letter</button>}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div style={{height:1,background:"rgba(255,255,255,0.08)",margin:"14px 0"}}/>
-              </>
-            );
-          })()}
+              );})}
+              <div style={{height:1,background:"rgba(255,255,255,0.08)",margin:"12px 0"}}/>
+            </>}
 
-          {/* Non-Academic section */}
-          {(()=>{
-            const nonAcademic = userRole==="director"
-              ? dirQueue.filter(r=>!isAcademic(r.empNo))
-              : regQueue;
-
-            return(
-              <>
-                <div style={{fontSize:11,fontWeight:700,color:C.purple,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>
-                  {userRole==="director"
-                    ? "🏢 Non-Academic — Final Approval (LO ✓ + Registrar ✓)"
-                    : "🏢 Non-Academic — Your Recommendation (LO ✓ → You → Director)"}
+            {/* Section B: All Non Academic leaves Registrar can approve directly */}
+            <div style={{fontSize:11,fontWeight:700,color:C.accent,marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
+              ✅ Direct Approval — Non Academic Staff
+            </div>
+            <div style={{...s.alertBox("warn"),marginBottom:10,fontSize:11}}>You can approve Non Academic staff directly at any stage. Academic staff require Director approval.</div>
+            {regCanApprove.filter(r=>!regToRecommend.find(x=>x.id===r.id)).length===0&&regToRecommend.length===0?
+              <div style={{...s.card,textAlign:"center",padding:30,color:C.muted}}>No Non Academic applications pending</div>:
+              regCanApprove.filter(r=>!regToRecommend.find(x=>x.id===r.id)).map(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo); return(
+                <div key={r.id} style={{...s.card,borderColor:r.status==="Reg Recommended"?"#3b82f633":C.border}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                    <div><div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div><div style={{fontSize:11,color:C.muted}}>{emp?.designation}</div></div>
+                    <span style={s.badge(r.status)}>{r.status}</span>
+                  </div>
+                  <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
+                  <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    <button style={{...s.btn("success"),padding:"10px 16px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✓ Approve</button>
+                    <button style={{...s.btn("danger"),padding:"10px 16px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>✗ Reject</button>
+                    <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"125a",content:genForm125a(r,emp)})}>📄</button>
+                    <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"190",content:genForm190Entry(r,emp)})}>📓</button>
+                  </div>
                 </div>
-                {nonAcademic.length===0
-                  ? <div style={{...s.card,textAlign:"center",padding:30,color:C.muted}}>
-                      <div style={{fontSize:24,marginBottom:6}}>✅</div>
-                      <div>{userRole==="director"?"No non-academic applications ready for approval":"No applications awaiting your recommendation"}</div>
+              );})}
+          </>}
+
+          {userRole==="director"&&<>
+            {/* Academic — direct approval, no recommendation needed */}
+            {(()=>{
+              const acApps=[...pending,...loRecommended,...regRecommended].filter(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo);return emp?.section!=="Non Academic";});
+              const naApps=[...pending,...loRecommended,...regRecommended].filter(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo);return emp?.section==="Non Academic";});
+              return(<>
+                <div style={{fontSize:11,fontWeight:700,color:C.success,marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Academic Staff — Direct Approval</div>
+                <div style={{...s.alertBox("warn"),fontSize:11,marginBottom:10}}>Academic staff leave does not require Leave Officer or Registrar recommendation. You approve directly.</div>
+                {acApps.length===0?<div style={{...s.card,textAlign:"center",padding:20,color:C.muted,fontSize:12,marginBottom:12}}>No academic applications pending</div>:
+                acApps.map(r=>{const emp=ALL_STAFF.find(e=>e.empNo===r.empNo);return(
+                  <div key={r.id} style={{...s.card,borderLeft:"3px solid #22c55e",marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                      <div><div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div><div style={{fontSize:11,color:C.muted}}>{emp?.designation} · <span style={s.sectionChip("Academic")}>Academic</span></div></div>
+                      <span style={s.badge(r.status)}>{r.status}</span>
                     </div>
-                  : nonAcademic.map(r=>{
-                      const emp=ALL_STAFF.find(e=>e.empNo===r.empNo);
-                      return(
-                        <div key={r.id} style={{...s.card,borderLeft:"3px solid "+C.purple,marginBottom:10}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                            <div>
-                              <div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div>
-                              <div style={{fontSize:11,color:C.muted}}>{emp?.designation} · Non-Academic</div>
-                            </div>
-                            <span style={s.badge(r.status)}>{r.status}</span>
-                          </div>
-                          {r.recommendation&&<div style={{fontSize:10,color:C.purple,marginBottom:4}}>📋 {r.recommendation}</div>}
-                          <div style={{fontSize:12,marginBottom:4}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> {t("days","දින")}</div>
-                          <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
-                          {r.actingOfficer&&<div style={{fontSize:10,color:C.muted,marginBottom:6}}>🔄 Acting: {ALL_STAFF.find(e=>e.empNo===r.actingOfficer)?.fullName||r.actingOfficer}</div>}
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                            {userRole==="registrar"&&<>
-                              <button style={{...s.btn("success"),padding:"9px 16px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,true,"registrar")}>✅ Recommend to Director</button>
-                              <button style={{...s.btn("danger"),padding:"9px 16px",fontSize:12}} onClick={()=>doRecommend(r.empNo,r.id,false,"registrar")}>❌ Not Recommend</button>
-                            </>}
-                            {userRole==="director"&&<>
-                              <button style={{...s.btn("success"),padding:"10px 18px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✅ Approve</button>
-                              <button style={{...s.btn("danger"),padding:"10px 18px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>❌ Reject</button>
-                            </>}
-                            <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"Gen 125a",content:genForm125a(r,emp)})}>📄 125a</button>
-                            {r.type==="Duty Leave"&&<button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"Duty Form",content:genDutyLeaveForm(r,emp||{},r.actingOfficer||"")})}>📋 Duty</button>}
-                            {r.type==="Duty Leave"&&r.dutyLetter&&<button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>{const w=window.open();w.document.write('<img src="'+r.dutyLetter+'" style="max-width:100%"/>');}}>📎 Letter</button>}
-                          </div>
-                        </div>
-                      );
-                    })
-                }
-              </>
-            );
-          })()}
+                    <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
+                    <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <button style={{...s.btn("success"),padding:"10px 16px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✓ Approve</button>
+                      <button style={{...s.btn("danger"),padding:"10px 16px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>✗ Reject</button>
+                      <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"125a",content:genForm125a(r,emp)})}>📄</button>
+                      <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"190",content:genForm190Entry(r,emp)})}>📓</button>
+                    </div>
+                  </div>
+                );})}
+                <div style={{height:1,background:"rgba(255,255,255,0.08)",margin:"12px 0"}}/>
+                {/* Non Academic — after LO + Registrar recommendations */}
+                <div style={{fontSize:11,fontWeight:700,color:"#a78bfa",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Non Academic Staff — After LO &amp; Registrar Recommendation</div>
+                <div style={{...s.alertBox("warn"),fontSize:11,marginBottom:10}}>Non Academic leave flows through Leave Officer then Registrar before reaching you. You can also approve at any stage.</div>
+                {naApps.length===0?<div style={{...s.card,textAlign:"center",padding:20,color:C.muted,fontSize:12}}>No non-academic applications pending</div>:
+                naApps.map(r=>{const emp=ALL_STAFF.find(e=>e.empNo===r.empNo);return(
+                  <div key={r.id} style={{...s.card,borderLeft:r.status==="Reg Recommended"?"3px solid #3b82f6":r.status==="LO Recommended"?"3px solid #a78bfa":"3px solid #f59e0b",marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                      <div><div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div><div style={{fontSize:11,color:C.muted}}>{emp?.designation} · <span style={s.sectionChip("Non Academic")}>Non Academic</span></div></div>
+                      <span style={s.badge(r.status)}>{r.status}</span>
+                    </div>
+                    {r.recommendation&&<div style={{fontSize:10,color:"#94a3b8",marginBottom:5,fontStyle:"italic"}}>📝 {r.recommendation}</div>}
+                    <div style={{fontSize:12,marginBottom:6}}><b>{r.type}</b> · {fmtD(r.from)} → {fmtD(r.to)} · <b>{r.days}</b> days</div>
+                    <div style={{fontSize:11,color:"#475569",marginBottom:10}}>{r.reason}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      <button style={{...s.btn("success"),padding:"10px 16px",fontSize:13}} onClick={()=>doApprove(r.empNo,r.id)}>✓ Approve</button>
+                      <button style={{...s.btn("danger"),padding:"10px 16px",fontSize:13}} onClick={()=>doReject(r.empNo,r.id)}>✗ Reject</button>
+                      <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"125a",content:genForm125a(r,emp)})}>📄</button>
+                      <button style={{...s.btn("outline"),padding:"8px 12px",fontSize:11}} onClick={()=>setModal({title:"190",content:genForm190Entry(r,emp)})}>📓</button>
+                    </div>
+                  </div>
+                );})}
+              </>);
+            })()}
+          </>}
         </div>
       );
     }
-  }
-  return(<div style={s.wrap}>{Modal}{PinModal}<div style={s.main}>{renderTab()}</div></div>);
+
+    // ── REPORTS ──────────────────────────────────────────────────
+    if(tab==="reports") return(
+      <div>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>
+          {userRole==="director"?"📊 All Staff Leave Overview":"📑 Reports & Letters"}
+        </div>
+
+        {/* ── Gen 190 Monthly Report (Leave Officer + Director) ── */}
+        {userRole==="leave_officer"&&(
+          <div style={{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+            <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📓 Monthly Leave Register — Gen 190</div>
+            <label style={s.label}>{t("Select Month","මාසය")}</label>
+            <input type="month" style={{...s.input,marginBottom:10}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
+            <button style={{...s.btn("navy"),width:"100%",padding:"11px 0"}} onClick={()=>setModal({title:`Gen 190 — ${reportMonth}`,content:genMonthlyGen190(leaveRecords,reportMonth)})}>
+              📓 {t("Generate Gen 190 Report","Gen 190 ජනනය")}
+            </button>
+          </div>
+        )}
+
+        {/* ── Leave Summary per staff (ALL roles that have reports tab) ── */}
+        <div style={{background:"#1a3a5c",border:"1px solid #2e6da4",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+          <div style={{fontSize:12,color:"#c4a227",fontWeight:700,marginBottom:8}}>📊 {t("Leave Summary — Any Staff Member","ඕනෑම සේවකයෙකුගේ සාරාංශ")}</div>
+          <label style={s.label}>{t("Staff Member","සේවකයා")}</label>
+          <select style={{...s.select,marginBottom:8}} value={summaryEmp} onChange={e=>setSummaryEmp(e.target.value)}>
+            <option value="">— {t("Select staff member","සේවකයා තෝරන්න")} —</option>
+            {ALL_STAFF.map(e=><option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>)}
+          </select>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
+            {["year","month","custom"].map(p=>(
+              <button key={p} style={{...s.btn(summaryPeriod===p?"gold":"outline"),padding:"8px 0",fontSize:11}} onClick={()=>setSummaryPeriod(p)}>
+                {p==="year"?"This Year":p==="month"?"This Month":t("Custom","අභිරුචි")}
+              </button>
+            ))}
+          </div>
+          {summaryPeriod==="custom"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>{t("From","සිට")}</label><input type="date" style={s.input} value={summaryFrom} onChange={e=>setSummaryFrom(e.target.value)} /></div>
+            <div><label style={s.label}>{t("To","දක්වා")}</label><input type="date" style={s.input} value={summaryTo} onChange={e=>setSummaryTo(e.target.value)} /></div>
+          </div>}
+          {summaryEmp&&<button style={{...s.btn("navy"),width:"100%",padding:"11px 0",marginTop:4}} onClick={()=>{
+            const emp=ALL_STAFF.find(e=>e.empNo===summaryEmp);
+            if(!emp)return;
+            const from=summaryPeriod==="year"?`${currYear}-01-01`:summaryPeriod==="month"?today().slice(0,7)+"-01":summaryFrom;
+            const to=summaryPeriod==="custom"?summaryTo:today();
+            const label=summaryPeriod==="year"?`Year ${currYear}`:summaryPeriod==="month"?`Month ${today().slice(0,7)}`:`${summaryFrom} to ${summaryTo}`;
+            setModal({title:`Leave Summary — ${emp.fullName}`,content:genLeaveSummary(emp,leaveRecords,from,to,label)});
+          }}>{t("📊 Generate Summary Report","📊 සාරාංශ ජනනය")}</button>}
+        </div>
+
+        {/* ── All staff leave overview cards (Director sees everyone) ── */}
+        {userRole==="director"&&(
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>
+              👥 All Staff — Current Year Leave Status
+            </div>
+            {ALL_STAFF.map(e=>{
+              const bals=getLeaveBalance(e,leaveRecords,currYear);
+              const casualBal=bals.find(b=>b.type==="Casual Leave");
+              const vacBal=bals.find(b=>b.type==="Vacation/Sick Leave");
+              const myRecs=(leaveRecords[e.empNo]||[]);
+              const pending_count=myRecs.filter(r=>r.status==="Pending"||r.status==="LO Recommended"||r.status==="Reg Recommended").length;
+              const approved_count=myRecs.filter(r=>r.status==="Approved").length;
+              return(
+                <div key={e.empNo} style={{...s.card,padding:"12px 14px",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700}}>{e.fullName}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{e.designation} · {e.section}</div>
+                      <div style={{display:"flex",gap:10,marginTop:6,flexWrap:"wrap"}}>
+                        {casualBal&&<span style={{fontSize:10,color:"#3b82f6",fontWeight:600}}>📋 Casual: {casualBal.balance}/{casualBal.total}</span>}
+                        {vacBal&&<span style={{fontSize:10,color:"#22c55e",fontWeight:600}}>🌴 Vac/Sick: {vacBal.balance}/{vacBal.total}</span>}
+                        {pending_count>0&&<span style={{fontSize:10,color:C.warn,fontWeight:600}}>⏳ {pending_count} pending</span>}
+                        {approved_count>0&&<span style={{fontSize:10,color:C.success,fontWeight:600}}>✅ {approved_count} approved</span>}
+                      </div>
+                    </div>
+                    <button style={{...s.btn("outline"),padding:"6px 12px",fontSize:11}} onClick={()=>{
+                      const from=`${currYear}-01-01`;
+                      const to=today();
+                      setModal({title:`Leave Records — ${e.fullName}`,content:genLeaveSummary(e,leaveRecords,from,to,`Year ${currYear}`)});
+                    }}>📋 View</button>
+                  </div>
+                  {/* Recent leaves */}
+                  {myRecs.length>0&&<div style={{marginTop:8,borderTop:"1px solid #e2e8f0",paddingTop:8}}>
+                    {[...myRecs].reverse().slice(0,2).map(r=>(
+                      <div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                        <span style={{fontSize:10,color:C.text}}>{r.type} · {r.from} → {r.to} ({r.days}d)</span>
+                        <span style={{...s.badge(r.status),fontSize:9}}>{r.status}</span>
+                      </div>
+                    ))}
+                  </div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── DTET Letters (Leave Officer only) ── */}
+        {userRole==="leave_officer"&&(
+          <>
+            <div style={{fontSize:13,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>📄 DTET Department Letters</div>
+            {ALL_STAFF.map(e=>(
+              <div key={e.empNo} style={{...s.card,marginBottom:6}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600}}>{e.fullName}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{e.designation} · {e.section}</div>
+                  </div>
+                  <button style={{...s.btn("navy"),padding:"6px 12px",fontSize:11}} onClick={()=>setModal({title:`DTET — ${e.fullName}`,content:genDTETLetter(e,leaveRecords)})}>📄 DTET</button>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {isAbnormal(e,leaveRecords).abnormal&&(
+                    <button style={{...s.btn("danger"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Advisory — ${e.fullName}`,content:genAbnormalLetter(e,leaveRecords)})}>🚨 Advisory Letter</button>
+                  )}
+                  {medCertOverdue(e,leaveRecords).length>0&&(
+                    <button style={{...s.btn("warn"),padding:"5px 10px",fontSize:10}} onClick={()=>setModal({title:`Med Reminder — ${e.fullName}`,content:genMedCertReminder(e,medCertOverdue(e,leaveRecords))})}>🏥 Med Reminder</button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {/* Alerts section inside reports for leave officer */}
+            <div style={{fontSize:13,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:.5,margin:"14px 0 8px"}}>🚨 Leave Alerts</div>
+            {ALL_STAFF.map(e=>{
+              const ab=isAbnormal(e,leaveRecords);
+              const overdue=medCertOverdue(e,leaveRecords);
+              if(!ab.abnormal&&overdue.length===0) return null;
+              return(
+                <div key={e.empNo} style={{...s.card,borderLeft:`3px solid ${ab.severe?C.danger:C.warn}`,marginBottom:8,padding:"10px 14px"}}>
+                  <div style={{fontSize:13,fontWeight:700}}>{e.fullName}</div>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{e.designation}</div>
+                  {ab.severe&&<div style={{fontSize:11,color:C.danger}}>🚨 Leave entitlement exhausted — advisory letter should be issued</div>}
+                  {ab.abnormal&&!ab.severe&&<div style={{fontSize:11,color:C.warn}}>⚠️ Leave usage exceeds 75% of annual entitlement</div>}
+                  {overdue.length>0&&<div style={{fontSize:11,color:C.danger}}>🏥 Medical certificate overdue for {overdue.length} period(s)</div>}
+                </div>
+              );
+            }).filter(Boolean)}
+          </>
+        )}
+      </div>
+    );
+
+
+    // ── DIRECTOR SETTINGS ────────────────────────────────────────
+    if(tab==="settings") return(
+      <div>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>{t("⚙️ Settings & Admin","⚙️ සැකසුම් සහ පරිපාලන")}</div>
+        {userRole==="registrar"&&<div style={{...s.alertBox("warn"),marginBottom:12,fontSize:12}}>
+          👔 As Registrar, you can manage PINs and add/remove staff members.
+        </div>}
+        {(userRole==="director"||userRole==="registrar")&&<>
+        <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>👥 Add New Staff Member</div>
+        <div style={{background:"#fff",border:"1px solid #dce3ea",borderRadius:12,padding:16,marginBottom:12}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>Employee No *</label><input style={s.input} id="ns-eno" placeholder="e.g. 400001" /></div>
+            <div><label style={s.label}>Title</label><select style={s.select} id="ns-title"><option>Mr</option><option>Ms</option><option>Mrs</option><option>Dr</option></select></div>
+          </div>
+          <div style={{marginBottom:8}}><label style={s.label}>Full Name * (with initials)</label><input style={s.input} id="ns-name" placeholder="e.g. A. B. C. Perera" /></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>Last Name *</label><input style={s.input} id="ns-last" placeholder="Perera" /></div>
+            <div><label style={s.label}>Designation *</label><input style={s.input} id="ns-desig" placeholder="e.g. Instructor" /></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={s.label}>Section</label><select style={s.select} id="ns-sec"><option>{t("Academic","අධ්‍යාපනික")}</option><option>{t("Non Academic","අධ්‍යාපනික නොවන")}</option></select></div>
+            <div><label style={s.label}>Grade</label><select style={s.select} id="ns-grade"><option value="officer">Officer</option><option value="junior">Junior</option></select></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+            <div><label style={s.label}>Gender</label><select style={s.select} id="ns-gender"><option>{t("Male","පුරුෂ")}</option><option>{t("Female","ස්ත්‍රී")}</option></select></div>
+            <div><label style={s.label}>Date Joined *</label><input type="date" style={s.input} id="ns-joined" /></div>
+          </div>
+          <button style={{background:"#1a3a5c",border:"none",borderRadius:8,padding:"12px 0",color:"#fff",fontWeight:700,fontSize:14,width:"100%",cursor:"pointer"}} onClick={()=>{
+            const eno=document.getElementById("ns-eno")?.value?.trim();
+            const name=document.getElementById("ns-name")?.value?.trim();
+            const last=document.getElementById("ns-last")?.value?.trim();
+            const desig=document.getElementById("ns-desig")?.value?.trim();
+            const joined=document.getElementById("ns-joined")?.value;
+            if(!eno||!name||!last||!desig||!joined){alert("Please fill Employee No, Full Name, Last Name, Designation and Date Joined.");return;}
+            if(STAFF.find(e=>e.empNo===eno)){alert("Employee number "+eno+" already exists!");return;}
+            STAFF.push({empNo:eno,title:document.getElementById("ns-title")?.value,initials:name.split(" ").slice(0,-1).join(" ")+" ",lastName:last,fullName:name,dob:"2000-01-01",nic:"",gender:document.getElementById("ns-gender")?.value,joined,section:document.getElementById("ns-sec")?.value,designation:desig,basicSalary:0,staffGrade:document.getElementById("ns-grade")?.value});
+            ["ns-eno","ns-name","ns-last","ns-desig","ns-joined"].forEach(id=>{const el=document.getElementById(id);if(el)el.value="";});
+            alert("Added: "+name+" ("+eno+")\nDefault PIN: "+eno.slice(-4));
+          }}>{t("+ Add Staff Member","+ සේවකයා එකතු")}</button>
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>🗑️ Remove Staff Member</div>
+        <div style={{background:"#fff",border:"1px solid #dce3ea",borderRadius:12,padding:16,marginBottom:16}}>
+          <label style={s.label}>Select Staff Member</label>
+          <select style={{...s.select,marginBottom:10}} id="rm-emp">
+            <option value="">— Select —</option>
+            {STAFF.filter(e=>!["11004","250015","20990","255003"].includes(e.empNo)).map(e=>(<option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>))}
+          </select>
+          <button style={{background:"#b91c1c",border:"none",borderRadius:8,padding:"12px 0",color:"#fff",fontWeight:700,fontSize:14,width:"100%",cursor:"pointer"}} onClick={()=>{
+            const eno=document.getElementById("rm-emp")?.value;
+            if(!eno){alert("Please select a staff member.");return;}
+            const emp=STAFF.find(e=>e.empNo===eno);
+            if(!emp)return;
+            if(!window.confirm("Remove "+emp.fullName+"?"))return;
+            STAFF.splice(STAFF.findIndex(e=>e.empNo===eno),1);
+            alert(emp.fullName+" removed.");
+          }}>🗑️ Remove Staff Member</button>
+          <div style={{fontSize:11,color:"#92400e",marginTop:6}}>⚠️ Director, Registrar, Leave Officer, ICT Officer cannot be removed.</div>
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.7,marginBottom:8}}>Staff List ({STAFF.length} members)</div>
+        <div style={{background:"#fff",border:"1px solid #dce3ea",borderRadius:12,marginBottom:16,maxHeight:280,overflowY:"auto"}}>
+          {STAFF.map(e=>(<div key={e.empNo} style={{display:"flex",justifyContent:"space-between",padding:"9px 14px",borderBottom:"1px solid #f1f5f9"}}>
+            <div><div style={{fontSize:12,fontWeight:600,color:"#1a3a5c"}}>{e.fullName}</div><div style={{fontSize:10,color:"#64748b"}}>{e.designation} · {e.section}</div></div>
+            <div style={{fontSize:11,fontWeight:700,color:"#2e6da4"}}>{e.empNo}</div>
+          </div>))}
+        </div>
+        {/* ── Staff Management ── */}
+        <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:10,textTransform:"uppercase"}}>Staff Management</div>
+        <div style={{...s.card,marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showAddStaff?12:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:"#1a3a5c"}}>{t("Add New Staff Member","නව සේවකයෙකු එකතු කරන්න")}</div>
+            <button style={{...s.btn(showAddStaff?"danger":"navy"),padding:"8px 14px",fontSize:12}} onClick={()=>setShowAddStaff(v=>!v)}>
+              {showAddStaff?"Cancel":t("+ Add Staff","+ සේවකයා")}
+            </button>
+          </div>
+          {showAddStaff&&<div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <div><label style={s.label}>{t("Emp Number","Emp අංකය")}</label><input style={s.input} value={newStaffForm.empNo} onChange={e=>setNewStaffForm(f=>({...f,empNo:e.target.value}))} placeholder="e.g. 400001" /></div>
+              <div><label style={s.label}>{t("Title","ශීර්ෂය")}</label>
+                <select style={s.select} value={newStaffForm.title} onChange={e=>setNewStaffForm(f=>({...f,title:e.target.value}))}>
+                  {["Mr","Ms","Mrs","Dr","Rev"].map(t=><option key={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{marginBottom:8}}><label style={s.label}>{t("Full Name","සම්පූර්ණ නම")}</label><input style={s.input} value={newStaffForm.fullName} onChange={e=>setNewStaffForm(f=>({...f,fullName:e.target.value,lastName:e.target.value.split(" ").pop()}))} placeholder="e.g. A. B. C. Perera" /></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <div><label style={s.label}>{t("Designation","තනතුර")}</label><input style={s.input} value={newStaffForm.designation} onChange={e=>setNewStaffForm(f=>({...f,designation:e.target.value}))} placeholder="e.g. Instructor" /></div>
+              <div><label style={s.label}>{t("Section","අංශය")}</label>
+                <select style={s.select} value={newStaffForm.section} onChange={e=>setNewStaffForm(f=>({...f,section:e.target.value}))}>
+                  <option>{t("Academic","අධ්‍යාපනික")}</option><option>{t("Non Academic","අධ්‍යාපනික නොවන")}</option>
+                </select>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+              <div><label style={s.label}>{t("Gender","ස්ත්‍රී/පුරුෂ")}</label>
+                <select style={s.select} value={newStaffForm.gender} onChange={e=>setNewStaffForm(f=>({...f,gender:e.target.value}))}>
+                  <option>{t("Male","පුරුෂ")}</option><option>{t("Female","ස්ත්‍රී")}</option>
+                </select>
+              </div>
+              <div><label style={s.label}>{t("Grade","ශ්‍රේණිය")}</label>
+                <select style={s.select} value={newStaffForm.staffGrade} onChange={e=>setNewStaffForm(f=>({...f,staffGrade:e.target.value}))}>
+                  <option value="officer">Officer</option><option value="junior">Junior</option>
+                </select>
+              </div>
+              <div><label style={s.label}>{t("Joined","සේවයට")}</label><input type="date" style={s.input} value={newStaffForm.joined} onChange={e=>setNewStaffForm(f=>({...f,joined:e.target.value}))} /></div>
+            </div>
+            <button style={{...s.btn("success"),width:"100%",padding:"12px 0"}} onClick={()=>{
+              if(!newStaffForm.empNo||!newStaffForm.fullName||!newStaffForm.designation){alert(t("Please fill Employee Number, Full Name and Designation.","Emp. Number, සම්පූර්ණ නම සහ තනතුර ඇතුළු කරන්න."));return;}
+              if(ALL_STAFF.find(e=>e.empNo===newStaffForm.empNo)){alert(t("Employee Number already exists!","Emp. Number දැනටමත් ඇත!"));return;}
+              const newEmp={...newStaffForm,initials:newStaffForm.fullName.split(" ").slice(0,-1).join(" "),nic:"",dob:"",basicSalary:0};
+              setExtraStaff(p=>[...p,newEmp]);
+              setNewStaffForm({empNo:"",fullName:"",lastName:"",title:"Mr",gender:"Male",designation:"",section:"Non Academic",joined:today(),staffGrade:"officer"});
+              setShowAddStaff(false);
+              alert(t(`${newEmp.fullName} added successfully!`,`${newEmp.fullName} සාර්ථකව එකතු කරන ලදී!`));
+            }}>{t("✓ Add Staff Member","✓ සේවකයා එකතු කරන්න")}</button>
+          </div>}
+        </div>
+
+        {/* Extra staff list */}
+        {extraStaff.length>0&&<>
+          <div style={{fontSize:11,color:C.muted,fontWeight:700,marginBottom:6,textTransform:"uppercase"}}>{t("Recently Added Staff","අලුතින් එකතු කළ සේවකයින්")}</div>
+          {extraStaff.map(e=>(
+            <div key={e.empNo} style={{...s.card,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",marginBottom:6}}>
+              <div><div style={{fontSize:13,fontWeight:600,color:"#1a3a5c"}}>{e.fullName}</div><div style={{fontSize:11,color:C.muted}}>{e.designation} · {e.empNo}</div></div>
+              <button style={{...s.btn("danger"),padding:"6px 10px",fontSize:11}} onClick={()=>{if(confirm(t(`Remove ${e.fullName}?`,`${e.fullName} ඉවත් කරන්නද?`))){setExtraStaff(p=>p.filter(s=>s.empNo!==e.empNo));}}}>✗</button>
+            </div>
+          ))}
+        </>}
+
+        {/* Deactivate existing staff */}
+        <div style={{fontSize:12,color:C.muted,fontWeight:700,margin:"16px 0 8px",textTransform:"uppercase"}}>{t("Deactivate Staff","සේවකයා අක්‍රිය කරන්න")}</div>
+        <div style={s.card}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:8}}>{t("Deactivated staff cannot log in. They are hidden from all lists.","අක්‍රිය කළ සේවකයින්ට login කළ නොහැක.")}</div>
+          <select style={{...s.select,marginBottom:8}} id="deact-emp">
+            <option value="">— {t("Select staff to deactivate","අක්‍රිය කිරීමට සේවකයා")} —</option>
+            {ALL_STAFF.filter(e=>!["11004","250015","20990","255003"].includes(e.empNo)).map(e=>(
+              <option key={e.empNo} value={e.empNo}>{e.fullName} ({e.empNo})</option>
+            ))}
+          </select>
+          <button style={{...s.btn("danger"),width:"100%",padding:"11px 0"}} onClick={()=>{
+            const emp=document.getElementById("deact-emp")?.value;
+            if(!emp){alert(t("Select a staff member.","සේවකයෙකු තෝරන්න."));return;}
+            const e=ALL_STAFF.find(s=>s.empNo===emp);
+            if(confirm(t(`Deactivate ${e?.fullName}? They will not be able to log in.`,`${e?.fullName} අක්‍රිය කරන්නද?`))){
+              setDeactivated(p=>[...p,emp]);
+              alert(t(`${e?.fullName} has been deactivated.`,`${e?.fullName} අක්‍රිය කරන ලදී.`));
+            }
+          }}>{t("Deactivate Staff Member","සේවකයා අක්‍රිය කරන්න")}</button>
+          {deactivated.length>0&&<div style={{marginTop:10}}>
+            <div style={{fontSize:11,color:C.muted,marginBottom:4}}>{t("Deactivated","අක්‍රිය")}:</div>
+            {deactivated.map(empNo=>{const e=STAFF.find(s=>s.empNo===empNo)||extraStaff.find(s=>s.empNo===empNo);return(
+              <div key={empNo} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"4px 0",borderBottom:"1px solid #f1f4f7"}}>
+                <span style={{color:C.muted}}>{e?.fullName} ({empNo})</span>
+                <button style={{...s.btn("success"),padding:"3px 8px",fontSize:10}} onClick={()=>setDeactivated(p=>p.filter(x=>x!==empNo))}>{t("Reactivate","නැවත සක්‍රිය")}</button>
+              </div>
+            );})}
+          </div>}
+        </div>
+
+        {/* ── End Director-only block ── */}
+        </>}
+        <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:10,marginTop:16,textTransform:"uppercase"}}>{t("PIN Management","PIN කළමනාකරණය")}</div>
+        {Object.entries(FIXED_ROLES).map(([empNo,role])=>{
+          const emp=STAFF.find(e=>e.empNo===empNo);
+          return <div key={empNo} style={{...s.card,borderColor:ROLE_META[role]?.color+"33",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <div style={{fontSize:22}}>{ROLE_META[role]?.icon}</div>
+              <div><div style={{fontSize:13,fontWeight:700}}>{emp?.fullName}</div><div style={{fontSize:11,color:C.muted}}>{ROLE_META[role]?.label} · {empNo}</div></div>
+            </div>
+            {empNo===currentUser.empNo?<div style={{fontSize:11,color:C.muted}}>Use 🔑 button in header to change your own PIN.</div>:
+            <div style={{display:"flex",gap:8}}>
+              <input type="password" placeholder="New PIN" style={{...s.input,flex:1,letterSpacing:6,fontSize:16}} value={resetTarget===empNo?resetVal:""} onChange={e=>{setResetTarget(empNo);setResetVal(e.target.value);}} maxLength={8} />
+              <button style={{...s.btn("warn"),padding:"12px 16px"}} onClick={()=>{if(!resetVal||resetVal.length<4){alert("Min 4 digits.");return;}setPins(p=>({...p,[empNo]:resetVal}));setResetTarget("");setResetVal("");alert(`PIN reset for ${emp?.fullName}!`);}}>{t("Reset","නැවත සකසන්න")}</button>
+            </div>}
+          </div>;
+        })}
+        <div style={{fontSize:12,color:C.muted,fontWeight:700,marginBottom:10,marginTop:16,textTransform:"uppercase"}}>All Leave Records</div>
+        {allLeaves.length===0?<div style={{...s.card,textAlign:"center",padding:30,color:C.muted}}>No records</div>:
+        [...allLeaves].reverse().slice(0,20).map(r=>{const emp=STAFF.find(e=>e.empNo===r.empNo); return(
+          <div key={r.id} style={{...s.card,padding:"10px 12px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><div style={{fontSize:12,fontWeight:600}}>{emp?.fullName}</div><div style={{fontSize:10,color:C.muted}}>{r.type} · {r.days}d · {fmtD(r.from)}</div></div>
+            <span style={s.badge(r.status)}>{r.status}</span>
+          </div>
+        );})}
+      </div>
+    );
+
+    // ── ATTENDANCE (ICT) ─────────────────────────────────────────
+    if(tab==="attendance") {
+      const attStats = {
+        present:  STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="present").length,
+        minor:    STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="minor_late").length,
+        late:     STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="late").length,
+        absent:   STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="absent").length,
+        onLeave:  STAFF.filter(e=>getAttStatus(e.empNo,attDate)==="on_leave").length,
+        noMark:   STAFF.filter(e=>!getAttStatus(e.empNo,attDate)).length,
+      };
+      return(
+        <div>
+          {/* 📂 Upload finger scanner report — Leave Officer */}
+          {userRole==="leave_officer"&&(
+            <div style={{display:"flex",gap:10,alignItems:"center",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+              <button style={{background:"#1e3a5f",border:"none",borderRadius:8,padding:"9px 16px",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}} onClick={()=>setTab("scan")}>
+                📂 Upload Finger Scanner Report
+              </button>
+              <span style={{fontSize:11,color:"#1d4ed8"}}>Import daily Excel from biometric machine to auto-fill attendance</span>
+            </div>
+          )}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontSize:16,fontWeight:700}}>📅 Attendance</div>
+            <input type="date" style={{...s.input,width:150,fontSize:13,padding:"8px 10px"}} value={attDate} onChange={e=>setAttDate(e.target.value)} />
+          </div>
+          {isWkendHol(attDate)&&<div style={s.alertBox("warn")}>⚠️ Weekend/Public Holiday — no attendance required.</div>}
+          {/* Rules reminder */}
+          <div style={{...s.card,background:"rgba(56,189,248,0.04)",borderColor:"rgba(56,189,248,0.15)",padding:"10px 12px",marginBottom:12}}>
+            <div style={{fontSize:11,color:C.accent,fontWeight:700,marginBottom:6}}>📋 Time Rules</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+              <div style={{background:"#eff6ff",borderRadius:6,padding:"6px 8px",fontSize:10}}>
+                <div style={{fontWeight:700,color:"#1d4ed8",marginBottom:2}}>👔 Officers (08:30)</div>
+                <div>✅ Arrive {"<"} 08:15 → Leave 16:00</div>
+                <div>✅ Arrive ≤ 08:30 → Leave 16:15</div>
+                <div>⏱ 08:31–09:00 → Minor Late → 16:45</div>
+                <div>🔴 {">"} 09:00 → Late → stay till 16:45</div>
+              </div>
+              <div style={{background:"#fefce8",borderRadius:6,padding:"6px 8px",fontSize:10}}>
+                <div style={{fontWeight:700,color:"#854d0e",marginBottom:2}}>🧹 Minor Staff (08:00)</div>
+                <div>✅ Arrive ≤ 08:00 → Leave 16:45</div>
+                <div>⏱ 08:01–08:15 → Minor Late → 17:00</div>
+                <div>🔴 {">"} 08:15 → Late → stay till 17:00</div>
+                <div style={{color:"#64748b"}}>* 16:15 without special duties</div>
+              </div>
+            </div>
+            <div style={{fontSize:10,color:"#64748b"}}>
+              🌅 <b>Short Leave AM:</b> 08:30–10:00 &nbsp;|&nbsp; 🌇 <b>PM:</b> Officer 14:45–16:15 · Junior 15:00–16:15 &nbsp;|&nbsp; 📋 Quota: 2/month
+            </div>
+          </div>
+          {/* Stats row */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:12}}>
+            {[{l:t("Present","පැමිණ"),v:attStats.present,c:C.success},{l:"Minor Late",v:attStats.minor,c:"#84cc16"},{l:"Late (>9)",v:attStats.late,c:C.warn},{l:t("Absent","නොපැමිණ"),v:attStats.absent,c:C.danger},{l:t("On Leave","නිවාඩු"),v:attStats.onLeave,c:C.accent},{l:"Not Marked",v:attStats.noMark,c:C.muted}].map(st=>(
+              <div key={st.l} style={{background:st.c+"14",border:`1px solid ${st.c}22`,borderRadius:8,padding:"8px 4px",textAlign:"center"}}>
+                <div style={{fontSize:18,fontWeight:800,color:st.c}}>{st.v}</div>
+                <div style={{fontSize:9,color:"#94a3b8"}}>{st.l}</div>
+              </div>
+            ))}
+          </div>
+          {STAFF.map(emp=>{
+            const st=getAttStatus(emp.empNo,attDate);
+            const detail=getAttDetail(emp.empNo,attDate);
+            const scanTime=scanData[attDate]?.[emp.empNo];
+            const isOnLeave=st==="on_leave";
+            const isMinorLate=st==="minor_late";
+            const isLate=st==="late";
+            const monthNow=attDate.slice(0,7);
+            const minorLates=getMinorLates(emp.empNo,monthNow);
+            const shortUsed=shortLeavesUsed(emp.empNo,shortLeaveRecs,monthNow);
+            const todayShorts=(shortLeaveRecs[emp.empNo]||[]).filter(r=>r.date===attDate);
+            const hasMorningShort=todayShorts.some(r=>r.type==="morning");
+            const hasEveShort=todayShorts.some(r=>r.type==="evening");
+            const chipColor=st==="present"?C.success:st==="minor_late"?"#84cc16":st==="late"?C.warn:st==="absent"?C.danger:st==="on_leave"?C.accent:C.muted;
+            return <div key={emp.empNo} style={{...s.card,padding:"10px 12px",marginBottom:6,opacity:isOnLeave?0.65:1,borderColor:isLate?"#f59e0b22":isMinorLate?"#84cc1622":C.border}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700}}>{emp.fullName}</div>
+                  <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{emp.designation} · <span style={{color:emp.staffGrade==="junior"?"#f59e0b":"#38bdf8"}}>{emp.staffGrade}</span></div>
+                  {scanTime&&<div style={{fontSize:10,color:C.accent}}>🖐 Scan: {scanTime}</div>}
+                  {isLate&&detail?.coverUntil&&<div style={{fontSize:10,color:C.warn,fontWeight:700}}>⏰ Must cover until {detail.coverUntil}</div>}
+                  {isMinorLate&&<div style={{fontSize:10,color:"#84cc16"}}>Minor late #{minorLates} this month {minorLates%2===0?"(pair forgiven ✓)":"(1 unpaired)"}</div>}
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <span style={{display:"inline-block",padding:"3px 9px",borderRadius:999,fontSize:11,fontWeight:700,background:chipColor+"20",color:chipColor,border:`1px solid ${chipColor}33`}}>
+                    {st==="present"?"✓ Present":st==="minor_late"?"⏱ Minor Late":st==="late"?"🔴 Late":st==="absent"?"✗ Absent":st==="on_leave"?"📋 On Leave":"—"}
+                  </span>
+                  {shortUsed>0&&<div style={{fontSize:10,color:"#84cc16",marginTop:3}}>Short: {shortUsed}/{SHORT_LEAVE_PER_MONTH}</div>}
+                </div>
+              </div>
+              {!isOnLeave&&<>
+                {/* Scan-based: show result + edit/delete only */}
+                {scanTime
+                  ? <div style={{fontSize:11,color:C.accent,marginBottom:6}}>🖐 Finger scan: <b>{scanTime}</b> → auto-classified as <b>{st==="present"?"Present":st==="minor_late"?"Minor Late":st==="late"?"Late":st}</b></div>
+                  : <div style={{fontSize:11,color:C.muted,marginBottom:6}}>No finger scan — status set manually</div>
+                }
+                <div style={{display:"flex",gap:5,marginBottom:6}}>
+                  <button style={{...s.btn("outline"),padding:"5px 12px",fontSize:11,flex:1}} onClick={()=>{
+                    const s2=window.prompt("Edit status for "+emp.fullName+":\n1=Present  2=Minor Late  3=Late  4=Absent","1");
+                    const map={"1":"present","2":"minor_late","3":"late","4":"absent"};
+                    const newSt=map[s2?.trim()];
+                    if(newSt) setAttStatus(emp.empNo,attDate,{status:newSt,scanTime:scanTime||null,minorLate:newSt==="minor_late",coverUntil:newSt==="late"?COVER_END:null});
+                  }}>✏️ Edit</button>
+                  {attendance[attDate]?.[emp.empNo]&&<button style={{...s.btn("danger"),padding:"5px 12px",fontSize:11,flex:1}} onClick={()=>{
+                    if(window.confirm("Remove manual attendance for "+emp.fullName+"?"))
+                      setAttendance(prev=>{const n={...prev};if(n[attDate]){const d={...n[attDate]};delete d[emp.empNo];n[attDate]=d;}return n;});
+                  }}>🗑️ Delete</button>}
+                </div>
+                {/* Short leave buttons */}
+                {!isOnLeave&&shortUsed<SHORT_LEAVE_PER_MONTH&&<div style={{display:"flex",gap:5}}>
+                  <button style={{...s.btn(hasMorningShort?"purple":""),padding:"5px 10px",fontSize:10,flex:1,opacity:hasMorningShort?1:0.7}} onClick={()=>hasMorningShort?revokeShortLeave(emp.empNo,attDate,"morning"):grantShortLeave(emp.empNo,attDate,"morning")}>
+                    {hasMorningShort?"✓ AM Short":"+ AM Short"} (8:30–10:00)
+                  </button>
+                  <button style={{...s.btn(hasEveShort?"purple":""),padding:"5px 10px",fontSize:10,flex:1,opacity:hasEveShort?1:0.7}} onClick={()=>hasEveShort?revokeShortLeave(emp.empNo,attDate,"evening"):grantShortLeave(emp.empNo,attDate,"evening")}>
+                    {hasEveShort?"✓ PM Short":"+ PM Short"} ({emp.staffGrade==="junior"?"15:00":"14:45"}–16:15)
+                  </button>
+                </div>}
+                {!isOnLeave&&shortUsed>=SHORT_LEAVE_PER_MONTH&&<div style={{fontSize:10,color:C.danger,textAlign:"center",padding:"4px 0"}}>Short leave quota used ({SHORT_LEAVE_PER_MONTH}/{SHORT_LEAVE_PER_MONTH} this month)</div>}
+              </>}
+            </div>;
+          })}
+        </div>
+      );
+    }
+
+    // ── FINGER SCAN SYNC (ICT) ───────────────────────────────────
+    if(tab==="scan") return(
+      <div>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>📂 Import Attendance from Finger Scanner</div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:14}}>Upload the daily Excel file exported from the biometric machine — attendance is processed automatically.</div>
+
+        {/* Upload card */}
+        <div style={{...s.card,border:"2px dashed #3b82f6",background:"#eff6ff",marginBottom:14}}>
+          <div style={{textAlign:"center",padding:"8px 0"}}>
+            <div style={{fontSize:32,marginBottom:8}}>📊</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#1d4ed8",marginBottom:6}}>Drop Excel File or Click to Upload</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Supported: .xlsx — Columns needed: Employee ID, Date, Time (or DateTime)</div>
+            <input type="file" accept=".xlsx,.xls" id="xlsx-upload" style={{display:"none"}}
+              onChange={e=>{
+                const file=e.target.files?.[0];
+                if(!file)return;
+                const reader=new FileReader();
+                reader.onload=async(ev)=>{
+                  try{
+                    // Dynamically import SheetJS
+                    const XLSX=await import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs");
+                    const wb=XLSX.read(new Uint8Array(ev.target.result),{type:"array",cellDates:true});
+                    const ws=wb.Sheets[wb.SheetNames[0]];
+                    const rows=XLSX.utils.sheet_to_json(ws,{raw:false,dateNF:"YYYY-MM-DD"});
+                    processXlsxRows(rows, file.name);
+                  }catch(err){
+                    alert("Error reading file: "+err.message);
+                  }
+                };
+                reader.readAsArrayBuffer(file);
+                e.target.value="";
+              }}
+            />
+            <button style={{...s.btn("primary"),padding:"11px 28px",fontSize:14}}
+              onClick={()=>document.getElementById("xlsx-upload").click()}>
+              📂 Choose Excel File
+            </button>
+          </div>
+        </div>
+
+        {/* Column mapping helper */}
+        <div style={{...s.card,marginBottom:14,padding:"12px 14px"}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#1d4ed8",marginBottom:8}}>📋 Expected Excel Format</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>
+            {[["Employee ID","E001, W001..."],["Date","2026-04-10 or 10/04/2026"],["Time","08:28:00 or 08:28"]].map(([h,ex])=>(
+              <div key={h} style={{background:"#f8fafc",borderRadius:8,padding:"8px 10px",border:"1px solid #e2e8f0"}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#1d4ed8"}}>{h}</div>
+                <div style={{fontSize:10,color:C.muted}}>{ex}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:11,color:C.muted}}>✓ Multiple scans per employee per day are fine — system uses first=check-in, last=check-out<br/>✓ Duplicate rows are safe and preserved for audit</div>
+        </div>
+
+        {/* Processing status */}
+        {xlsxLog.length>0&&<>
+          <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:8,textTransform:"uppercase"}}>📋 Import Log</div>
+          <div style={{...s.card,padding:"10px 14px",marginBottom:14,maxHeight:200,overflowY:"auto"}}>
+            {xlsxLog.map((line,i)=>(
+              <div key={i} style={{fontSize:11,color:line.startsWith("✓")?C.success:line.startsWith("✗")?C.danger:line.startsWith("⚠")?C.warn:"#334155",padding:"2px 0",borderBottom:"1px solid #f1f5f9"}}>{line}</div>
+            ))}
+          </div>
+        </>}
+
+        {/* Results for selected date */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div style={{fontSize:13,fontWeight:700}}>📅 View Results</div>
+          <input type="date" style={{...s.input,width:160,fontSize:13,padding:"8px 10px"}} value={attDate} onChange={e=>setAttDate(e.target.value)} />
+        </div>
+        {scanData[attDate]&&<>
+          {/* Stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6,marginBottom:12}}>
+            {[
+              {l:"Present (≤08:30)",v:ALL_STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,OFFICE_START)<=0;}).length,c:C.success},
+              {l:"Minor Late (08:31–09:00)",v:ALL_STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,OFFICE_START)>0&&timeCmp(t,LATE_GRACE)<=0;}).length,c:"#84cc16"},
+              {l:"Late (after 09:00)",v:ALL_STAFF.filter(e=>{const t=scanData[attDate]?.[e.empNo];return t&&timeCmp(t,LATE_GRACE)>0;}).length,c:C.warn},
+              {l:"No Scan / Absent",v:ALL_STAFF.filter(e=>!scanData[attDate]?.[e.empNo]&&getAttStatus(e.empNo,attDate)!=="on_leave").length,c:C.danger},
+            ].map(st=>(
+              <div key={st.l} style={{background:st.c+"14",border:`1px solid ${st.c}22`,borderRadius:8,padding:"8px 10px"}}>
+                <div style={{fontSize:20,fontWeight:800,color:st.c}}>{st.v}</div>
+                <div style={{fontSize:10,color:"#94a3b8"}}>{st.l}</div>
+              </div>
+            ))}
+          </div>
+          {/* Staff rows */}
+          {ALL_STAFF.map(emp=>{
+            const scanTime=scanData[attDate]?.[emp.empNo];
+            const st=getAttStatus(emp.empNo,attDate);
+            const cl=classifyScanIn(scanTime,emp);
+            const chipC=st==="present"?C.success:st==="minor_late"?"#84cc16":st==="late"?C.warn:st==="absent"?C.danger:C.muted;
+            return <div key={emp.empNo} style={{...s.card,padding:"9px 12px",marginBottom:5}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700}}>{emp.fullName}</div>
+                  <div style={{fontSize:10,color:C.muted}}>{emp.designation}</div>
+                  {cl.coverUntil&&<div style={{fontSize:10,color:C.warn,fontWeight:700}}>⏰ Cover until {cl.coverUntil}</div>}
+                </div>
+                <div style={{textAlign:"right"}}>
+                  {scanTime
+                    ?<div style={{fontSize:11,color:C.accent,marginBottom:2}}>🖐 {scanTime}</div>
+                    :<div style={{fontSize:11,color:C.muted,marginBottom:2}}>No scan</div>
+                  }
+                  <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:6,background:chipC+"20",color:chipC}}>
+                    {st==="present"?"Present":st==="minor_late"?"Minor Late":st==="late"?"Late":st==="on_leave"?"On Leave":"Absent"}
+                  </span>
+                </div>
+              </div>
+            </div>;
+          })}
+        </>}
+        {!scanData[attDate]&&<div style={{...s.card,textAlign:"center",padding:30,color:C.muted,fontSize:13}}>
+          No scan data for {attDate}.<br/>Upload an Excel file above to import attendance.
+        </div>}
+      </div>
+    );
+
+    // ── MONTHLY SUMMARY (ICT) ────────────────────────────────────
+    if(tab==="monthly") {
+      const [yr,mo]=reportMonth.split("-").map(Number);
+      const daysInMonth=new Date(yr,mo,0).getDate();
+      return(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{fontSize:16,fontWeight:700}}>{t("📊 Monthly Summary","📊 මාසික සාරාංශ")}</div>
+            <input type="month" style={{...s.input,width:160,fontSize:13,padding:"8px 10px"}} value={reportMonth} onChange={e=>setReportMonth(e.target.value)} />
+          </div>
+          {STAFF.map(emp=>{
+            let pres=0,minorL=0,lateC=0,abs=0,onLeave=0,holidays=0,shortMorn=0,shortEve=0;
+            for(let d=1;d<=daysInMonth;d++){
+              const ds=`${reportMonth}-${String(d).padStart(2,"0")}`;
+              const st=getAttStatus(emp.empNo,ds);
+              if(isWkendHol(ds)) holidays++;
+              else if(st==="present") pres++;
+              else if(st==="minor_late") {pres++;minorL++;}  // minor late = counted as present
+              else if(st==="late") {pres++;lateC++;}          // late = counted as present (covered)
+              else if(st==="absent") abs++;
+              else if(st==="on_leave") onLeave++;
+            }
+            // Count short leaves this month
+            (shortLeaveRecs[emp.empNo]||[]).filter(r=>r.month===reportMonth).forEach(r=>{
+              if(r.type==="morning") shortMorn++;
+              else shortEve++;
+            });
+            const working=daysInMonth-holidays;
+            const pct=working>0?Math.round(pres/working*100):0;
+            const minorPairs=Math.floor(minorL/2);
+            return <div key={emp.empNo} style={{...s.card,marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700}}>{emp.fullName}</div>
+                  <div style={{fontSize:12,color:"#64748b"}}>{emp.designation} · <span style={{color:emp.staffGrade==="junior"?"#f59e0b":"#38bdf8"}}>{emp.staffGrade}</span></div>
+                </div>
+                <span style={{fontSize:14,fontWeight:800,color:pct>=90?C.success:pct>=75?C.warn:pct>0?C.danger:C.muted}}>{pres>0?pct+"%":"—"}</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4,fontSize:10,textAlign:"center",marginBottom:lateC>0||minorL>0||shortMorn+shortEve>0?8:0}}>
+                {[{l:"Worked",v:pres,c:C.success},{l:t("Absent","නොපැමිණ"),v:abs,c:C.danger},{l:t("On Leave","නිවාඩු"),v:onLeave,c:C.accent},{l:"Work Days",v:working,c:C.muted}].map(st=>(
+                  <div key={st.l} style={{background:"rgba(255,255,255,0.04)",borderRadius:6,padding:"4px 2px"}}><div style={{fontWeight:700,color:st.c}}>{st.v}</div><div style={{color:"#334155"}}>{st.l}</div></div>
+                ))}
+              </div>
+              {(lateC>0||minorL>0||shortMorn+shortEve>0)&&<div style={{fontSize:10,color:"#475569",borderTop:"1px solid rgba(255,255,255,0.05)",paddingTop:6,display:"flex",gap:8,flexWrap:"wrap"}}>
+                {minorL>0&&<span style={{color:"#84cc16"}}>⏱ Minor late: {minorL} ({minorPairs} pair{minorPairs!==1?"s":""} forgiven)</span>}
+                {lateC>0&&<span style={{color:C.warn}}>🔴 Late ({">"}9): {lateC}</span>}
+                {shortMorn>0&&<span style={{color:C.purple}}>🌅 AM short: {shortMorn}</span>}
+                {shortEve>0&&<span style={{color:C.purple}}>🌇 PM short: {shortEve}</span>}
+              </div>}
+            </div>;
+          })}
+        </div>
+      );
+    }
+
+    // ── UNAUTHORIZED FLAGS (ICT) ─────────────────────────────────
+    if(tab==="flags") {
+      const unauth=STAFF.flatMap(emp=>{
+        const flags=[];
+        Object.entries(attendance).forEach(([date,dayData])=>{
+          const d=dayData[emp.empNo];
+          const st=typeof d==="string"?d:d?.status;
+          if(st==="absent"){
+            const hasLeave=(leaveRecords[emp.empNo]||[]).some(r=>r.status==="Approved"&&date>=r.from&&date<=r.to);
+            if(!hasLeave) flags.push({...emp,date});
+          }
+        });
+        return flags;
+      });
+      // Late covers overdue: late >09:00 entries
+      const lateCovers=STAFF.flatMap(emp=>{
+        const flags=[];
+        Object.entries(attendance).forEach(([date,dayData])=>{
+          const d=dayData[emp.empNo];
+          if(d?.status==="late"&&d?.coverUntil) flags.push({...emp,date,coverUntil:d.coverUntil,scanTime:d.scanTime});
+        });
+        return flags;
+      });
+      // Minor late pairs
+      const minorLateFlags=STAFF.map(emp=>{
+        const byMonth={};
+        Object.entries(attendance).forEach(([date,dayData])=>{
+          const d=dayData[emp.empNo];
+          if(d?.minorLate||d?.status==="minor_late"){
+            const m=date.slice(0,7);
+            byMonth[m]=(byMonth[m]||[]);
+            byMonth[m].push(date);
+          }
+        });
+        return {emp, byMonth};
+      }).filter(x=>Object.keys(x.byMonth).length>0);
+
+      return(
+        <div>
+          <div style={{fontSize:16,fontWeight:700,marginBottom:14}}>🚩 Flags & Late Cover</div>
+
+          {lateCovers.length>0&&<>
+            <div style={{fontSize:12,color:C.warn,fontWeight:700,marginBottom:8,textTransform:"uppercase"}}>🔴 Late After 09:00 — Must Cover Until 16:45</div>
+            {lateCovers.map((e,i)=>(
+              <div key={i} style={{...s.card,borderColor:"#f59e0b33",marginBottom:6,padding:"10px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <div><div style={{fontSize:12,fontWeight:700}}>{e.fullName}</div><div style={{fontSize:10,color:C.muted}}>{e.designation}</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontSize:11,color:C.warn}}>{e.date}</div><div style={{fontSize:10,color:"#94a3b8"}}>Scan: {e.scanTime} → Cover: {e.coverUntil}</div></div>
+                </div>
+              </div>
+            ))}
+          </>}
+
+          {minorLateFlags.length>0&&<>
+            <div style={{fontSize:12,color:"#84cc16",fontWeight:700,marginBottom:8,marginTop:16,textTransform:"uppercase"}}>⏱ Minor Lates (08:31–09:00) — Every 2 Forgiven</div>
+            {minorLateFlags.map(({emp,byMonth})=>(
+              <div key={emp.empNo} style={{...s.card,borderColor:"#84cc1622",marginBottom:6,padding:"10px 12px"}}>
+                <div style={{fontSize:12,fontWeight:700,marginBottom:4}}>{emp.fullName}</div>
+                {Object.entries(byMonth).map(([month,dates])=>(
+                  <div key={month} style={{fontSize:11,color:"#64748b",marginBottom:2}}>
+                    {month}: {dates.length} minor late{dates.length!==1?"s":""} — {Math.floor(dates.length/2)} pair{Math.floor(dates.length/2)!==1?"s":""} forgiven{dates.length%2===1?" (1 remaining)":""}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>}
+
+          <div style={{fontSize:12,color:C.danger,fontWeight:700,marginBottom:8,marginTop:16,textTransform:"uppercase"}}>✗ Unauthorized Absences</div>
+          {unauth.length===0?<div style={{...s.card,textAlign:"center",padding:24,color:C.success,fontSize:12}}>✅ No unauthorized absences</div>:
+          unauth.map((e,i)=>(
+            <div key={i} style={{...s.card,borderColor:"#ef444433",marginBottom:6,padding:"10px 12px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontSize:12,fontWeight:700}}>{e.fullName}</div><div style={{fontSize:10,color:C.muted}}>{e.designation}</div></div>
+                <div style={{fontSize:12,color:C.danger,fontWeight:700}}>{e.date}</div>
+              </div>
+              <div style={{fontSize:11,color:C.warn,marginTop:3}}>Absent without approved leave</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return <div style={{...s.card,textAlign:"center",padding:40,color:C.muted}}>Coming soon</div>;
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // MAIN APP RENDER
+  // ═══════════════════════════════════════════════════════════════
+  return(
+    <div style={s.wrap}>
+      {Modal}{PinModal}
+      {/* Top bar */}
+      <div style={{background:"rgba(8,15,30,0.95)",backdropFilter:"blur(16px)",borderBottom:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <img src={LOGO_64} alt="COT" style={{width:40,height:40,borderRadius:8,objectFit:"cover"}} />
+          <div><div style={{fontSize:13,fontWeight:700,lineHeight:1.2}}>{t("COT Ratnapura","COT රත්නපුර")}</div><div style={{fontSize:9,color:C.muted}}>DTET · Leave Management</div></div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {notifications.length>0&&<div style={{width:8,height:8,borderRadius:"50%",background:C.danger}}/>}
+          {["director","registrar","leave_officer","ict_officer"].includes(userRole)&&
+            <button style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.muted,cursor:"pointer",fontSize:13,padding:"6px 10px"}} onClick={()=>setPinModal(true)}>🔑</button>}
+          <button style={{background:lang==="si"?"#c4a227":"transparent",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,padding:"6px 10px",fontWeight:700}} onClick={()=>setLang(l=>l==="en"?"si":"en")}>{lang==="en"?"සිං":"EN"}</button>
+          <button style={{background:"none",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:13,padding:"6px 10px"}} onClick={doLogout}>{t("Exit","පිටවෙන්න")}</button>
+        </div>
+      </div>
+      {/* Content */}
+      <div style={s.main}>{renderTab()}</div>
+      {/* Bottom nav */}
+      <div style={s.bottomNav}>
+        {navItems.map(n=>(
+          <button key={n.k} style={s.navItem(tab===n.k,roleCol)} onClick={()=>{if(n.k==="chat"){setChatMsgs([]);setChatInput("");}setTab(n.k);}}>
+            <span style={{fontSize:28,lineHeight:1}}>{n.i}</span>
+            <span>{n.l}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
